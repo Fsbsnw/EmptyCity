@@ -1,0 +1,70 @@
+﻿#pragma once
+
+#include "NativeGameplayTags.h"
+
+namespace ECGameplayTags
+{
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_Jump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_Sprint);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_Crouch);
+  
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_EnemyMeleeAttack);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_GrantEliteBuff);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ability_Jump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ability_Interact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ability_Sprint);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ability_Crouch);
+	
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Move);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Look_Mouse);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_UI);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_UI_HUD);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_UI_Inventory);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_UI_Crafting);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_UI_Map);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_UI_Bed);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_UI_FadeScreen);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_UI_Navigation);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_UI_Navigation_Confirm);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_UI_Navigation_Escape);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_UI_Navigation_Direction);
+	
+	extern const TMap<uint8, FGameplayTag> MovementModeTagMap;
+	extern const TMap<uint8, FGameplayTag> CustomMovementModeTagMap;
+	
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Movement_Mode_Walking);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Movement_Mode_Falling);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Death);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_DamageTaken);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Debuff_Stun);
+	
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Heal);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Stamina);
+	
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Moving);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Sprinting);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Attacking);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Crouching);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Death);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Death_Dying);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Death_Dead);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Buff);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Buff_EliteEmpowered);
+	
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Debuff);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Debuff_Stun);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_Home);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_Paradise);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_TradingPost);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_Quarry);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_Mine);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_CultistBase);
+}
