@@ -64,9 +64,9 @@
 >> 
 >> <img width="400" height="225" alt="포커싱" src="https://github.com/user-attachments/assets/4bd3ef7e-4045-452f-83c0-609a976dd0e0" />
 >> 
->> [ECUserWidget.cpp - HandleCloseRequest](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/ECUserWidget.cpp#L67)
+>> [ECUserWidget.cpp - NativeOnPreviewMouseButtonDown](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/ECUserWidget.cpp#L96)
 >>
->> [UIManagerSubsystem.cpp - CloseTopWidget](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L275)
+>> [UIManagerSubsystem.cpp - UpdateFocusStack](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L415)
 >
 > <br><br>
 >
@@ -75,5 +75,5 @@
 >> 
 >> <img width="400" height="225" alt="Video Project 2" src="https://github.com/user-attachments/assets/22bbe2c5-f105-435b-a9b1-524ef55a0788" />
 >> 
->> [ECMapWidget.cpp](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/Map/ECMapWidget.cpp#L64)
+>> [ECMapWidget.cpp - ReceiveDirectionInput_Implementation](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/Map/ECMapWidget.cpp#L64)
 
