@@ -34,15 +34,16 @@
 ### 기능 분류
 * [위젯 간 계층 관계](#위젯-간-계층-관계)
 * [스택 방식의 Close 기능](#스택-방식의-close-기능)
-* [위젯의 포커싱 기능](#위젯의-포커싱-기능)
+* [위젯 드래그 및 포커싱](#위젯-드래그-및-포커싱)
 * [위젯의 키보드 입력 기능](#위젯의-키보드-입력-기능)
+* [해금 시스템](#해금-시스템)
+* [인벤토리 위젯](#인벤토리-위젯)
+* [맵 위젯 확대 축소](#맵-위젯-확대-축소)
 
 <br><br>
 
 > ### 위젯 간 계층 관계
 >> 부모-자식 관계를 설정하여 부모 위젯이 닫힐 때 자식도 같이 제거합니다.
->>
->> GIF
 >> 
 >> [ECUserWidget.cpp - ClearAllChildren](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/ECUserWidget.cpp#L39)
 >
@@ -51,19 +52,17 @@
 > ### 스택 방식의 Close 기능
 >> 위젯의 Close 입력이 들어왔을 때, 자식이 있는 경우 우선적으로 처리합니다.
 >> 
->> GIF
->> 
 >> [ECUserWidget.cpp - HandleCloseRequest](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/ECUserWidget.cpp#L67)
 >>
 >> [UIManagerSubsystem.cpp - CloseTopWidget](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L275)
 >
 > <br><br>
 > 
-> ### 위젯의 포커싱 기능
+> ### 위젯 드래그 및 포커싱
 >> 위젯에 마우스 입력이 들어왔을 때, 포커스를 획득/해제합니다.
->> 
->> <img width="400" height="225" alt="포커싱" src="https://github.com/user-attachments/assets/4bd3ef7e-4045-452f-83c0-609a976dd0e0" />
->> 
+>>
+>> <img width="400" height="225" alt="드래그 포커스" src="https://github.com/user-attachments/assets/98760d6c-b777-4efe-8498-b9898652c62d" />
+>>
 >> [ECUserWidget.cpp - NativeOnPreviewMouseButtonDown](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/ECUserWidget.cpp#L96)
 >>
 >> [UIManagerSubsystem.cpp - UpdateFocusStack](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L415)
@@ -71,9 +70,35 @@
 > <br><br>
 >
 > ### 위젯의 키보드 입력 기능
->> 키보드 입력이 필요한 위젯이 열려 있는 경우, 해당 위젯에 필요한 IMC를 바탕으로 입력을 처리합니다.
 >> 
 >> <img width="400" height="225" alt="Video Project 2" src="https://github.com/user-attachments/assets/22bbe2c5-f105-435b-a9b1-524ef55a0788" />
 >> 
->> [ECMapWidget.cpp - ReceiveDirectionInput_Implementation](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/Map/ECMapWidget.cpp#L64)
+>> [ECMapWidget.cpp - NativeOnKeyDown](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/Map/ECMapWidget.cpp#L89)
+>
+> <br><br>
+>
+>> ### 해금 시스템
+>> 잠김, 해금, New 해금 상태
+>> 
+>> <img width="400" height="225" alt="해금" src="https://github.com/user-attachments/assets/25c1533c-32a4-416d-9bdc-eedd6717f3bf" />
+>>
+>> [ECProgressionSubsystem.cpp](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/Subsystem/ECProgressionSubsystem.cpp)
+>
+> <br><br>
+>
+>> ### 인벤토리 위젯
+>> 
+>> <img width="400" height="225" alt="인벤토리" src="https://github.com/user-attachments/assets/e98e1876-4cc9-4d58-b767-a55e4d42fadf" />
+>>
+>> [ECInventorySlotWidget.cpp](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/Inventory/ECInventorySlotWidget.cpp)
+>
+> <br><br>
+>
+>> ### 맵 위젯 확대 축소
+>> 
+>> <img width="400" height="225" alt="pannable맵" src="https://github.com/user-attachments/assets/5d42c727-6894-4337-9cc1-31a6f9b6d998" />
+>>
+>> [ECPannableMapWidget.cpp](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/Map/ECPannableMapWidget.cpp)
+
+
 
