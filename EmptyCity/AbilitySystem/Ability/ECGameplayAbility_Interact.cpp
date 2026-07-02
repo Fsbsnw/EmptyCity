@@ -8,6 +8,7 @@
 #include "Interaction/InteractionQuery.h"
 #include "Interaction/Task/AbilityTask_WaitForInteractableTargets_SingleLineTrace.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
+#include "Character/Player/Controller/ECPlayerController.h"
 
 class UUserWidget;
 
@@ -63,10 +64,19 @@ void UECGameplayAbility_Interact::StartLookForInteractables()
 
 void UECGameplayAbility_Interact::UpdateInteractions(const TArray<FInteractionOption>& InteractiveOptions)
 {
+	// 최신 선택지를 저장해 둡니다. TriggerInteraction()에서 이 목록을 사용합니다.
+	CurrentOptions = InteractiveOptions;
+
+	
 	if (AECPlayerController* PC = GetECPlayerControllerFromActorInfo())
 	{
-		// @TODO : InteractiveOptions를 받아서 UI를 화면에 표시
+		// 인디케이터 매니저 대신, PC에 만들어둘 블루프린트 이벤트를 호출합니다.(임시)
+		// 선택지가 1개 이상 있으면 true, 없으면 false를 넘겨 UI를 켜고 끄게 만듭니다.
+		bool bCanInteract = CurrentOptions.Num() > 0;
+		PC->K2_UpdateInteractionUI(bCanInteract, CurrentOptions);
 		
+		// @TODO : InteractiveOptions를 받아서 UI를 화면에 표시
+        
 		/*if (ULyraIndicatorManagerComponent* IndicatorManager = ULyraIndicatorManagerComponent::GetComponent(PC))
 		{
 			for (UIndicatorDescriptor* Indicator : Indicators)
@@ -96,9 +106,6 @@ void UECGameplayAbility_Interact::UpdateInteractions(const TArray<FInteractionOp
 			//TODO This should probably be a noisy warning.  Why are we updating interactions on a PC that can never do anything with them?
 		}*/
 	}
-
-	// 최신 선택지를 저장해 둡니다. TriggerInteraction()에서 이 목록을 사용합니다.
-	CurrentOptions = InteractiveOptions;
 }
 
 void UECGameplayAbility_Interact::TriggerInteraction(float TimeWaited)

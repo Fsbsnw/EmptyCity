@@ -3,19 +3,30 @@
 
 #include "UI/Widget/ECUserWidget.h"
 
-#include "View/MVVMView.h"
-#include "MVVMViewModelBase.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 #include "UI/Subsystem/UIManagerSubsystem.h"
+
+void UECUserWidget::OnWidgetOpened()
+{
+}
+
+void UECUserWidget::OnWidgetClosed()
+{
+}
 
 void UECUserWidget::InjectViewModel(UMVVMViewModelBase* TargetViewModel)
 {
+	if (!IsValid(TargetViewModel))
+	{
+		return;
+	}
+
+	CachedViewModels.Add(TargetViewModel->GetClass(), TargetViewModel);
+	
 	if (UMVVMView* MVVMView = GetMVVMView())
 	{
 		// MVVM 익스텐션 시스템에 뷰모델 인스턴스 등록
 		MVVMView->SetViewModelByClass(TargetViewModel);
-
-		// 블루프린트 알림 (초기화 타이밍 제공)
-		OnViewModelSet();
 	}
 }
 
@@ -48,6 +59,12 @@ void UECUserWidget::ClearAllChildren()
 		}
 	}
 	ChildWidgets.Empty();
+}
+
+void UECUserWidget::CloseWidgetAndChildren()
+{
+	ClearAllChildren();
+	RemoveFromParent();
 }
 
 void UECUserWidget::PushChild(UECUserWidget* FocusedChild)
@@ -93,36 +110,85 @@ bool UECUserWidget::HandleCloseRequest()
 	return false;
 }
 
-FReply UECUserWidget::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+FReply UECUserWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	// 자동 포커스 기능이 꺼져있다면 즉시 통과
-	if (bAutoFocusWithClick)
+	// 드래그가 켜져 있고, 마우스 왼쪽 버튼을 눌렀다면 드래그 시작!
+	if (bIsDraggable && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		// 최상위(Root) 위젯을 찾기 위한 포인터 추적 시작
-		UECUserWidget* CurrentWidget = this;
+		bIsDragging = true;
+		DragStartMousePosition = InMouseEvent.GetScreenSpacePosition();
+		DragStartWidgetTranslation = GetRenderTransform().Translation;
 
-		// 부모가 존재하는 동안(자식 위젯인 동안) 계속 위로 올라감
-		while (CurrentWidget->ParentWidget)
-		{
-			// 해당 부모의 로컬 팝업 스택 맨 위로 현재 위젯을 올림
-			CurrentWidget->ParentWidget->PushChild(CurrentWidget);
-	       
-			// 한 단계 위 부모로 포인터 이동
-			CurrentWidget = CurrentWidget->ParentWidget;
-		}
-
-		// While 문이 끝나면 CurrentWidget은 매니저에 등록된 최종 Root 위젯이 됩니다.
-		if (UUIManagerSubsystem* UIManager = GetOwningLocalPlayer()->GetSubsystem<UUIManagerSubsystem>())
-		{
-			UIManager->UpdateFocusStack(CurrentWidget);
-		}
+		// 마우스가 위젯을 계속 캡처합니다.
+		return FReply::Handled().CaptureMouse(TakeWidget());
 	}
-	
-	return Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
+	return FReply::Handled();
 }
 
-void UECUserWidget::CloseWidgetAndChildren()
+FReply UECUserWidget::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	ClearAllChildren();
-	RemoveFromParent();
+	if (bIsDragging)
+	{
+		// 1. 마우스가 얼마나 이동했는지 계산
+		FVector2D MouseDelta = InMouseEvent.GetScreenSpacePosition() - DragStartMousePosition;
+
+		// 2. 현재 화면의 DPI 스케일로 나눠주어야 마우스와 1:1로 딱 붙어서 이동합니다.
+		float DPIScale = UWidgetLayoutLibrary::GetViewportScale(GetWorld());
+		FVector2D NewTranslation = DragStartWidgetTranslation + (MouseDelta / DPIScale);
+
+		// 3. 위젯의 렌더링 위치 업데이트
+		SetRenderTranslation(NewTranslation);
+
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+}
+
+FReply UECUserWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (bIsDragging && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		bIsDragging = false;
+        
+		// 마우스 캡처를 풀어줍니다.
+		return FReply::Handled().ReleaseMouseCapture();
+	}
+
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
+}
+
+void UECUserWidget::NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent)
+{
+	// 최상위(Root) 위젯을 찾기 위한 포인터 추적 시작
+	UECUserWidget* CurrentWidget = this;
+
+	// 부모가 존재하는 동안(자식 위젯인 동안) 계속 위로 올라감
+	while (CurrentWidget->ParentWidget)
+	{
+		// 해당 부모의 로컬 팝업 스택 맨 위로 현재 위젯을 올림
+		CurrentWidget->ParentWidget->PushChild(CurrentWidget);
+       
+		// 한 단계 위 부모로 포인터 이동
+		CurrentWidget = CurrentWidget->ParentWidget;
+	}
+
+	// While 문이 끝나면 CurrentWidget은 매니저에 등록된 최종 Root 위젯이 됩니다.
+	if (UUIManagerSubsystem* UIManager = GetOwningLocalPlayer()->GetSubsystem<UUIManagerSubsystem>())
+	{
+		UIManager->UpdateFocusStack(CurrentWidget);
+	}
+
+	// Focus 획득 애니메이션 실행
+	OnFocusGainedAnim();
+	
+	Super::NativeOnAddedToFocusPath(InFocusEvent);
+}
+
+void UECUserWidget::NativeOnRemovedFromFocusPath(const FFocusEvent& InFocusEvent)
+{
+	// Focus 잃는 애니메이션 실행
+	OnFocusLostAnim();
+	
+	Super::NativeOnRemovedFromFocusPath(InFocusEvent);
 }

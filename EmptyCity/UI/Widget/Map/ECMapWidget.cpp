@@ -5,8 +5,10 @@
 
 #include "ECGameplayTags.h"
 #include "ECMapNodeWidget.h"
+#include "Blueprint/SlateBlueprintLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Subsystem/ECProgressionSubsystem.h"
 #include "UI/Widget/ECMapNodeInfoWidget.h"
 
 void UECMapWidget::NativeConstruct()
@@ -52,47 +54,124 @@ void UECMapWidget::NativeConstruct()
 	}
 }
 
-void UECMapWidget::ReceiveConfirmInput_Implementation()
+void UECMapWidget::OnWidgetOpened()
 {
-	if (CurrentFocusedNode == nullptr)
+	Super::OnWidgetOpened();
+
+	UECProgressionSubsystem* Progression = GetGameInstance()->GetSubsystem<UECProgressionSubsystem>();
+	if (!Progression) return;
+
+	NewRevealNodeQueue.Empty(); // 대기열 초기화
+
+	// 1. 모든 노드의 상태를 최신화하고, 연출이 필요한 애들을 찾아냅니다.
+	for (const auto& Pair : AllMapNodes)
 	{
-		return;
+		bool bIsUnlocked = Progression->IsContentUnlocked(Pair.Value->MyNodeTag);
+		bool bIsNewReveal = Progression->CheckAndConsumeReveal(Pair.Value->MyNodeTag);
+
+		// 배우(노드)에게 상태 지시
+		Pair.Value->SyncNodeState(bIsUnlocked, bIsNewReveal);
+
+		// 연출이 필요하다면 대기열에 추가!
+		if (bIsNewReveal)
+		{
+			NewRevealNodeQueue.Add(Pair.Value);
+		}
 	}
-	UE_LOG(LogTemp, Warning, TEXT("Focused Node : %s"), *CurrentFocusedNode->MyNodeTag.ToString());
+
+	// 2. 연출할 게 하나라도 있다면 순차 연출 시작
+	if (NewRevealNodeQueue.Num() > 0)
+	{
+		ProcessNextReveal();
+	}
 }
 
-void UECMapWidget::ReceiveDirectionInput_Implementation(EWidgetNavDirection Direction)
+FReply UECMapWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
-	// 선택되지 않은 상태면 Home을 표시합니다.
+	// 1. 현재 입력된 키 가져오기
+	const FKey PressedKey = InKeyEvent.GetKey();
+
+	// 2. WASD 키가 아니라면 처리를 안 하고 부모 클래스로 넘김 (무시)
+	if (PressedKey != EKeys::W && PressedKey != EKeys::A && PressedKey != EKeys::S && PressedKey != EKeys::D)
+	{
+		return FReply::Unhandled();
+	}
+
+	// 선택되지 않은 상태면 Home을 표시합니다. (WASD 중 아무거나 눌렀을 때 최초 활성화)
 	if (CurrentFocusedNode == nullptr)
 	{
 		CurrentFocusedNode = AllMapNodes[ECGameplayTags::MapNode_Location_Home];
 		CurrentFocusedNode->PlayHighlightAnim();
 		UpdateNodeInfo(CurrentFocusedNode);
-		return;
+		return FReply::Handled(); // 입력 처리 완료
 	}
-	// 1. 현재 노드에서 입력된 방향(Direction)에 연결된 이웃 노드 태그를 가져옵니다.
-	if (const FGameplayTag* TargetTag = CurrentFocusedNode->NeighborNodes.Find(Direction))
+
+	// 3. 프로젝트의 Direction 타입에 맞게 키 매핑하기
+	// ※ 중요: 'YourDirectionType'을 현재 NeighborNodes의 Key 타입(예: EMoveDirection, EUINavigation 등)으로 바꿔주세요.
+	EWidgetNavDirection TargetDirection; 
+
+	if (PressedKey == EKeys::W)       TargetDirection = EWidgetNavDirection::Up;
+	else if (PressedKey == EKeys::S)  TargetDirection = EWidgetNavDirection::Down;
+	else if (PressedKey == EKeys::A)  TargetDirection = EWidgetNavDirection::Left;
+	else if (PressedKey == EKeys::D)  TargetDirection = EWidgetNavDirection::Right;
+
+	// 4. 매핑된 방향(TargetDirection)으로 이웃 노드 검색
+	if (const FGameplayTag* TargetTag = CurrentFocusedNode->NeighborNodes.Find(TargetDirection))
 	{
-		// 2. 그 방향에 이웃 태그가 등록되어 있고, 유효하다면
 		if (TargetTag->IsValid() && AllMapNodes.Contains(*TargetTag))
 		{
-			// 3. 새로 이동할 노드를 찾습니다.
+			// 새 노드로 이동 처리
 			UECMapNodeWidget* NextNode = AllMapNodes[*TargetTag];
 
-			// 4. 기존 노드의 하이라이트를 끕니다.
 			CurrentFocusedNode->PlayUnhighlightAnim();
-
-			// 5. 새 노드에 하이라이트를 켭니다.
 			NextNode->PlayHighlightAnim();
-
-			// 6. 현재 포커싱된 노드를 새 노드로 교체합니다.
 			CurrentFocusedNode = NextNode;
 
-			// 변경된 노드 정보를 띄웁니다.
 			UpdateNodeInfo(CurrentFocusedNode);
 		}
 	}
+
+	// WASD 입력을 이 위젯에서 소비(Handled)했으므로, 다른 UI나 슬레이트로 입력이 전파되지 않도록 합니다.
+	return FReply::Handled();
+}
+
+void UECMapWidget::ProcessNextReveal()
+{
+	// 대기열이 비었다면 연출 끝!
+	if (NewRevealNodeQueue.Num() == 0)
+	{
+		return;
+	}
+
+	// 대기열에서 맨 앞의 노드를 꺼냅니다.
+	UECMapNodeWidget* TargetNode = NewRevealNodeQueue[0];
+	NewRevealNodeQueue.RemoveAt(0);
+
+	FGeometry ParentGeometry = GetCachedGeometry();
+	FGeometry NodeGeometry = TargetNode->GetCachedGeometry();
+
+	FVector2D RealPixelPosition = USlateBlueprintLibrary::AbsoluteToLocal(ParentGeometry, NodeGeometry.GetAbsolutePosition());
+
+	// 2. 전체 맵의 가로/세로 크기 구하기
+	FVector2D MapSize = ParentGeometry.GetLocalSize();
+
+	// 3. 픽셀 위치를 0.0 ~ 1.0 사이의 비율(Pivot 좌표)로 변환
+	FVector2D TargetPivot = FVector2D::ZeroVector;
+	if (MapSize.X > 0.f && MapSize.Y > 0.f)
+	{
+		TargetPivot.X = RealPixelPosition.X / MapSize.X;
+		TargetPivot.Y = RealPixelPosition.Y / MapSize.Y;
+	}
+
+	// 4. 이동 대신, '이 피벗을 기준으로 확대해라' 함수 호출
+	PlayNewNodeHighlight(TargetPivot);
+	
+	// // 카메라 이동 연출 실행
+	// PlayNewNodeHighlight(RealPixelPosition);
+
+	// 카메라 이동이 끝날 시간(예: 1.5초)을 기다렸다가 다음 노드로 넘어갑니다.
+	FTimerHandle WaitHandle;
+	GetWorld()->GetTimerManager().SetTimer(WaitHandle, this, &ThisClass::ProcessNextReveal, 1.5f, false);
 }
 
 void UECMapWidget::HandleNodeClicked(UECMapNodeWidget* ClickedNode)
@@ -139,19 +218,14 @@ void UECMapWidget::UpdateNodeInfo(UECMapNodeWidget* TargetNode)
 		FString TagString = TargetNode->MyNodeTag.ToString();
 		NodeInfoWidget->SetMapNodeName(FText::FromString(TagString));
 		
-		// 위치 동기화 로직 : 정보창과 타겟 노드의 캔버스 슬롯을 가져옵니다.
-		UCanvasPanelSlot* InfoSlot = Cast<UCanvasPanelSlot>(NodeInfoWidget->Slot);
-		if (InfoSlot)
-		{
-			// 1. 타겟 노드가 현재 모니터 화면상 어디에 있는지 '절대 좌표'를 가져옵니다.
-			FVector2D TargetAbsolutePos = TargetNode->GetCachedGeometry().GetAbsolutePosition();
+		// 1. 타겟 노드가 현재 모니터 화면상 어디에 있는지 '절대 좌표'를 가져옵니다.
+		FVector2D TargetAbsolutePos = TargetNode->GetCachedGeometry().GetAbsolutePosition();
 
-			// 2. 그 절대 좌표를 맵 위젯(this) 캔버스 기준의 '로컬 좌표'로 변환합니다.
-			FVector2D LocalPos = GetCachedGeometry().AbsoluteToLocal(TargetAbsolutePos);
+		// 2. 그 절대 좌표를 맵 위젯(this) 캔버스 기준의 '로컬 좌표'로 변환합니다.
+		FVector2D LocalPos = GetCachedGeometry().AbsoluteToLocal(TargetAbsolutePos);
 
-			// 3. 변환된 좌표에 오프셋을 더해서 정보창 위치를 설정합니다.
-			InfoSlot->SetPosition(LocalPos + NodeInfoWidgetOffset);
-		}
+		// 3. 변환된 좌표에 오프셋을 더해서 정보창 위치를 설정합니다.
+		NodeInfoWidget->SetRenderTranslation(LocalPos + NodeInfoWidgetOffset);
 		
 		NodeInfoWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}

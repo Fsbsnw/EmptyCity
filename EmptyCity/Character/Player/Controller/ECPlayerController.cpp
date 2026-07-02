@@ -7,12 +7,30 @@
 #include "Character/Player/State/ECPlayerState.h"
 #include "Core/GameState/ECGameState.h"
 #include "Data/UI/UIConfigDataAsset.h"
+#include "Equipment/ECQuickBarComponent.h"
 #include "Input/ECInputComponent.h"
+#include "Inventory/ECInventoryManagerComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "UI/Subsystem/UIManagerSubsystem.h"
 
 AECPlayerController::AECPlayerController()
 {
 	PlayerCameraManagerClass = AECPlayerCameraManager::StaticClass();
+	
+	// InventoryManager를 초기화합니다.
+	{
+		InventoryManagerComponent = CreateDefaultSubobject<UECInventoryManagerComponent>(TEXT("InventoryManagerComponent"));
+	}
+	
+	// QuickBarComponent를 초기화합니다.
+	{
+		QuickBarComponent = CreateDefaultSubobject<UECQuickBarComponent>(TEXT("QuickBarComponent"));
+	}
+}
+
+UECInventoryManagerComponent* AECPlayerController::GetInventoryManagerComponent() const
+{
+	return InventoryManagerComponent;
 }
 
 void AECPlayerController::PostProcessInput(const float DeltaTime, const bool bGamePaused)
@@ -58,31 +76,14 @@ void AECPlayerController::BeginPlay()
 
 void AECPlayerController::InitializeUI()
 {
-	// 1. GameState에서 UI 데이터 에셋 확보
 	UWorld* World = GetWorld();
 	if (!World) return;
 
 	AECGameState* GS = World->GetGameState<AECGameState>();
 	if (!GS || !GS->UIConfigDataAsset) return;
 
-	// 2. 확보한 데이터 에셋을 들고 각각의 전담 함수 호출
+	// 1. GameState에서 UI 데이터 에셋 확보
 	UUIConfigDataAsset* ConfigAsset = GS->UIConfigDataAsset;
-
-	// 3. UI Manager 초기화 호출
-	InitializeUIManager(ConfigAsset);
-
-	// 4. HUD 초기화
-	if (ULocalPlayer* LP = GetLocalPlayer())
-	{
-		if (UUIManagerSubsystem* UIManager = LP->GetSubsystem<UUIManagerSubsystem>())
-		{
-			UIManager->RouteUIInput(ECGameplayTags::InputTag_UI_HUD, this->GetPawn());
-		}
-	}
-}
-
-void AECPlayerController::InitializeUIManager(UUIConfigDataAsset* ConfigAsset)
-{
 	if (!ConfigAsset) return;
 
 	ULocalPlayer* LP = GetLocalPlayer();
@@ -91,18 +92,36 @@ void AECPlayerController::InitializeUIManager(UUIConfigDataAsset* ConfigAsset)
 	UUIManagerSubsystem* UIManager = LP->GetSubsystem<UUIManagerSubsystem>();
 	if (!UIManager) return;
 
-	// UI 데이터 주입
+	// 2. UI 데이터 설정 주입
 	UIManager->InitializeUIConfig(ConfigAsset->UIConfigData);
+
+	// 3. HUD 초기화
+	UIManager->RequestToggleInput(ECGameplayTags::InputTag_UI_HUD, this->GetPawn());
 }
 
-void AECPlayerController::Input_UIAction(const FInputActionValue& Value, FGameplayTag InputTag)
+void AECPlayerController::Input_UIAction(FGameplayTag InputTag)
 {
 	// 입력받은 Tag를 UIManagerSubsystem으로 바로 전달
 	if (ULocalPlayer* LP = GetLocalPlayer())
 	{
 		if (UUIManagerSubsystem* UIManager = LP->GetSubsystem<UUIManagerSubsystem>())
 		{
-			UIManager->RouteUIInputWithValue(InputTag, Value, this->GetPawn());
+			UIManager->RequestToggleInput(InputTag, this->GetPawn());
 		}
 	}
+}
+
+void AECPlayerController::SetCinematicInputLocked(bool bIsLocked)
+{
+	if (bIsLocked)
+	{
+		this->DisableInput(this);
+		if (APawn* MyPawn = GetPawn()) MyPawn->DisableInput(this);
+	}
+	else
+	{
+		this->EnableInput(this);
+		if (APawn* MyPawn = GetPawn()) MyPawn->EnableInput(this);
+	}
+	// SetCinematicMode()
 }

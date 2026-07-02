@@ -28,3 +28,23 @@ void UECMapNodeWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
 	Super::NativeOnMouseLeave(InMouseEvent);
 	OnNodeUnhovered.Broadcast(this);
 }
+
+void UECMapNodeWidget::SyncNodeState(bool bIsUnlocked, bool bIsNewReveal)
+{
+	// 1. 클릭 가능 여부 및 자물쇠 상태 업데이트
+	UpdateUnlockVisual(bIsUnlocked);
+    
+	// 이 위젯 자체의 입력 가능 여부를 차단/허용
+	SetIsEnabled(bIsUnlocked); 
+
+	// 2. 만약 방금 막 해금된 곳이라면 반짝이는 연출 실행
+	if (bIsNewReveal)
+	{
+		PlayNewRevealAnim();
+	}
+	// 3. 더 이상 새로운 해금이 아니라면, 루프 돌던 애니메이션을 강제로 꺼줍니다.
+	else
+	{
+		StopNewRevealAnim();
+	}
+}

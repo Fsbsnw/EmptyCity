@@ -35,7 +35,18 @@ UENUM(BlueprintType)
 enum class EWidgetLayerType : uint8
 {
 	HUD         UMETA(DisplayName = "HUD Layer (1F)"),
-	Window      UMETA(DisplayName = "Window Layer (2F)")
+	Window      UMETA(DisplayName = "Window Layer (2F)"),
+	System      UMETA(DisplayName = "System Layer (3F)")
+};
+
+/**
+ * @brief 위젯이 열리기 전에 연출될 전환 효과 설정
+ */
+UENUM(BlueprintType)
+enum class EWidgetTransitionType : uint8
+{
+	None            UMETA(DisplayName = "None"),
+	FadeTransition  UMETA(DisplayName = "Fade Transition (Black Screen)")
 };
 
 // ============================================================================
@@ -62,10 +73,6 @@ struct FUIConfigWidget
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI Config")
 	TArray<TSubclassOf<UECViewModelBase>> ViewModels;
 
-	/** 위젯이 열릴 때 덮어씌울 전용 입력 에셋 (맵 전용 IMC 등) */
-	UPROPERTY(EditAnywhere, Category = "UI Config|Input")
-	UInputMappingContext* OverrideIMC = nullptr;
-
 	/** 입력 우선순위 */
 	UPROPERTY(EditAnywhere, Category = "UI Config|Input")
 	int32 IMCPriority = 10;
@@ -77,6 +84,10 @@ struct FUIConfigWidget
 	/** 어느 레이어에 추가할 것인지 결정 */
 	UPROPERTY(EditDefaultsOnly, Category = "UI Config|Layout")
 	EWidgetLayerType LayerType = EWidgetLayerType::Window;
+
+	/** 전환 연출을 사용할 것인지 결정 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI Config|Transition")
+	EWidgetTransitionType TransitionType = EWidgetTransitionType::None;
 };
 
 /**

@@ -4,25 +4,96 @@
 #include "UI/Subsystem/UIManagerSubsystem.h"
 
 #include "ECGameplayTags.h"
-#include "EnhancedInputSubsystems.h"
 #include "Character/Player/Controller/ECPlayerController.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Data/UI/UIConfigDataAsset.h"
+#include "Framework/Application/NavigationConfig.h"
 #include "UI/ViewModel/ECViewModelBase.h"
 #include "UI/ViewModel/ECViewModelFactoryLibrary.h"
 #include "UI/Widget/ECMainLayoutWidget.h"
 #include "UI/Widget/ECUserWidget.h"
-#include "UI/Widget/Interface/NavigableWidgetInterface.h"
+#include "UI/Widget/FadeScreen/ECFadeScreenWidget.h"
 
+// =========================================================================
+// 화면 전환 연출
+// =========================================================================
+void UUIManagerSubsystem::PlayFadeOut(FOnFadeEvent OnFinishedCallback, float InFadeSpeed)
+{
+	FGameplayTag FadeOutTag = ECGameplayTags::InputTag_UI_FadeScreen_Out;
+    
+	if (UECUserWidget* Widget = OpenWidget(FadeOutTag))
+	{
+		if (UECFadeScreenWidget* FadeOut = Cast<UECFadeScreenWidget>(Widget))
+		{
+			FadeOut->PlayTransition(InFadeSpeed);
+			// 람다를 통해 애니메이션이 끝나면 매니저가 스스로 제거합니다.
+			FadeOut->OnFadeFinishedDelegate.AddWeakLambda(this, [this, FadeOutTag, OnFinishedCallback]()
+			{
+				this->CloseWidget(FadeOutTag);
+				OnFinishedCallback.ExecuteIfBound();
+			});
+		}
+	}
+}
 
+void UUIManagerSubsystem::PlayFadeIn(FOnFadeEvent OnFinishedCallback, float InFadeSpeed)
+{
+	FGameplayTag FadeInTag = ECGameplayTags::InputTag_UI_FadeScreen_In;
+    
+	if (UECUserWidget* Widget = OpenWidget(FadeInTag))
+	{
+		if (UECFadeScreenWidget* FadeIn = Cast<UECFadeScreenWidget>(Widget))
+		{
+			FadeIn->PlayTransition(InFadeSpeed);
+			// 람다를 통해 애니메이션이 끝나면 매니저가 스스로 제거합니다.
+			FadeIn->OnFadeFinishedDelegate.AddWeakLambda(this, [this, FadeInTag, OnFinishedCallback]()
+			{
+				this->CloseWidget(FadeInTag);
+				OnFinishedCallback.ExecuteIfBound();
+			});
+		}
+	}
+}
+
+void UUIManagerSubsystem::PlayFadeTransition(FOnFadeEvent OnBlackScreen, float InFadeSpeed)
+{
+	// 페이드 아웃과 페이드 인을 하나의 시퀀스로 실행합니다.
+	PlayFadeOut(FOnFadeEvent::CreateWeakLambda(this,
+		[this, OnBlackScreen, InFadeSpeed]()
+		{
+			// 1. 화면 까매짐 -> 원하는 외부 로직(지도 띄우기 등) 실행
+			OnBlackScreen.ExecuteIfBound();
+
+			// 2. 다 쓴 페이드 아웃 위젯 파괴
+			CloseWidget(ECGameplayTags::InputTag_UI_FadeScreen_Out);
+
+			// 3. 페이드 인 실행 (끝나면 알아서 파괴됨)
+			PlayFadeIn(FOnFadeEvent(), InFadeSpeed);
+		}),
+		InFadeSpeed
+	);
+}
+
+// =========================================================================
+// 위젯 관리
+// =========================================================================
 void UUIManagerSubsystem::InitializeUIConfig(const FUIConfigData& UIConfig)
 {
 	this->ConfigData = UIConfig;
 	ActiveWidgets.Empty();
 	WidgetStack.Empty();
+
+	// 게임 시작 시 전역 네비게이션 설정을 세팅
+	if (FSlateApplication::IsInitialized())
+	{
+		TSharedRef<FNavigationConfig> NavigationConfig = FSlateApplication::Get().GetNavigationConfig();
+		NavigationConfig->bTabNavigation = false;
+		NavigationConfig->bKeyNavigation = false;     // 필요에 따라 선택 (방향키 네비게이션 차단)
+		NavigationConfig->bAnalogNavigation = false;  // 필요에 따라 선택 (패드 아날로그 스틱 차단)
+	}
 
 	// 데이터 에셋에 등록된 MainLayout 클래스가 있다면 생성
 	if (UIConfig.MainLayoutClass)
@@ -38,7 +109,7 @@ void UUIManagerSubsystem::InitializeUIConfig(const FUIConfigData& UIConfig)
 	}
 }
 
-void UUIManagerSubsystem::OpenDynamicWidget(FGameplayTag Tag, const FUIConfigWidget& WidgetConfig, AActor* ContextActor)
+UECUserWidget* UUIManagerSubsystem::OpenDynamicWidget(FGameplayTag Tag, const FUIConfigWidget& WidgetConfig, AActor* ContextActor)
 {
 	// 1. 전달받은 임시 설정을 매니저의 ConfigData에 등록 (기존에 같은 태그가 있다면 덮어씌움)
 	ConfigData.WidgetMap.Add(Tag, WidgetConfig);
@@ -47,7 +118,9 @@ void UUIManagerSubsystem::OpenDynamicWidget(FGameplayTag Tag, const FUIConfigWid
 	ConfigData.WidgetMap[Tag].CachePolicy = EWidgetCachePolicy::DestroyOnClose;
 
 	// 3. 임시 등록 완료 후 위젯 토글 요청 
-	HandleToggleInput(Tag, ContextActor);
+	RequestToggleInput(Tag, ContextActor);
+
+	return ActiveWidgets.Contains(Tag) ? ActiveWidgets[Tag] : nullptr;
 }
 
 void UUIManagerSubsystem::CloseDynamicWidget(FGameplayTag Tag)
@@ -61,14 +134,10 @@ void UUIManagerSubsystem::CloseDynamicWidget(FGameplayTag Tag)
 		{
 			// 스택에서 제거하고 권한 뺏기
 			WidgetStack.Remove(Tag);
-			ApplyWidgetInputContext(ConfigData.WidgetMap[Tag], false);
 
 			// 파괴 또는 숨김
 			DeactivateWidget(Tag, Widget);
 			ConfigData.WidgetMap.Remove(Tag);
-			
-			// 밑에 깔려있던 위젯 포커스 살리기
-			FocusTopWidget();
 
 			// 입력 모드 갱신
 			UpdateInputMode();
@@ -76,69 +145,38 @@ void UUIManagerSubsystem::CloseDynamicWidget(FGameplayTag Tag)
 	}
 }
 
-void UUIManagerSubsystem::RouteUIInput(FGameplayTag Tag, AActor* ContextActor)
+void UUIManagerSubsystem::RequestToggleInput(FGameplayTag Tag, AActor* ContextActor)
 {
-	HandleToggleInput(Tag, ContextActor);
-}
-
-void UUIManagerSubsystem::RouteUIInputWithValue(FGameplayTag Tag, const FInputActionValue& Value, AActor* ContextActor)
-{
-	// 1. 조작(Action) 입력 태그인 경우 (WASD, Enter, ESC 등)
-	if (Tag.MatchesTag(ECGameplayTags::InputTag_UI_Navigation))
-	{
-		HandleActionInput(Tag, Value);	
-	}
-	// 2. 위젯 토글(Toggle) 요청인 경우 (인벤토리 키, 맵 키 등 단축키 입력)
-	else
-	{
-		HandleToggleInput(Tag, ContextActor);
-	}	
-}
-
-void UUIManagerSubsystem::HandleActionInput(FGameplayTag Tag, const FInputActionValue& Value)
-{
-	if (WidgetStack.IsEmpty())
-	{
-		return;
-	}
-
-	// 스택의 가장 마지막(최상단) 위젯 태그를 가져옵니다.
-	FGameplayTag TopTag = WidgetStack.Last();
-	UECUserWidget* TopWidget = ActiveWidgets[TopTag];
-
-	// Escape 입력이 들어온 경우 즉시 최상단 위젯을 닫습니다.
+	// 위젯 닫기 입력 처리
 	if (Tag.MatchesTagExact(ECGameplayTags::InputTag_UI_Navigation_Escape))
 	{
 		CloseTopWidget();
 		return;
 	}
-
-	// 네비게이션 인터페이스 미구현 시 조작 불가
-	if (!TopWidget->Implements<UNavigableWidgetInterface>()) return;
 	
-	// Direction 입력: 위젯 방향 이동
-	if (Tag.MatchesTagExact(ECGameplayTags::InputTag_UI_Navigation_Direction))
+	// 1. 데이터 에셋에 해당 태그가 있는지, 트랜지션 설정이 켜져 있는지 확인
+	bool bUseTransition = false;
+	if (ConfigData.WidgetMap.Contains(Tag))
 	{
-		FVector2D MoveVec = Value.Get<FVector2D>();
-
-		// 들어온 입력을 UI에서의 방향으로 변환합니다.
-		EWidgetNavDirection Direction = (FMath::Abs(MoveVec.X) > FMath::Abs(MoveVec.Y))
-            ? ((MoveVec.X > 0.f) ? EWidgetNavDirection::Right : EWidgetNavDirection::Left)
-            : ((MoveVec.Y > 0.f) ? EWidgetNavDirection::Up : EWidgetNavDirection::Down);
-		
-		INavigableWidgetInterface::Execute_ReceiveDirectionInput(TopWidget, Direction);
-		return;
+		bUseTransition = (ConfigData.WidgetMap[Tag].TransitionType == EWidgetTransitionType::FadeTransition);
 	}
-	
-	// Confirm 입력: 위젯 확인 동작
-	if (Tag.MatchesTagExact(ECGameplayTags::InputTag_UI_Navigation_Confirm))
+
+	// 2. 트랜지션이 켜져 있다면: 페이드 아웃 연출 이후에 ToggleLogic 실행
+	if (bUseTransition)
 	{
-		INavigableWidgetInterface::Execute_ReceiveConfirmInput(TopWidget);
-		return;
+		PlayFadeTransition(FOnFadeEvent::CreateWeakLambda(this, [this, Tag, ContextActor]()
+		{
+			this->ExecuteToggleLogic(Tag, ContextActor);
+		}));
+	}
+	// 3. 트랜지션이 없다면 (일반 인벤토리 등): 기다리지 않고 즉시 ToggleLogic 실행
+	else
+	{
+		ExecuteToggleLogic(Tag, ContextActor);
 	}
 }
 
-void UUIManagerSubsystem::HandleToggleInput(FGameplayTag Tag, AActor* ContextActor)
+void UUIManagerSubsystem::ExecuteToggleLogic(FGameplayTag Tag, AActor* ContextActor)
 {
 	// 1. 이미 활성화된 위젯인 경우
 	if (UECUserWidget** FoundWidget = ActiveWidgets.Find(Tag))
@@ -150,59 +188,81 @@ void UUIManagerSubsystem::HandleToggleInput(FGameplayTag Tag, AActor* ContextAct
 		{
 			// 스택 중간이나 최상단에 있던 해당 태그를 제거
 			WidgetStack.Remove(Tag);
-			ApplyWidgetInputContext(ConfigData.WidgetMap[Tag], false);
-
+			
 			// 캐싱 정책에 따라 위젯 숨기기/삭제
 			DeactivateWidget(Tag, Widget);
 		}
 		// 3. 위젯이 캐싱되어 숨겨진 상태인 경우 -> 다시 보여주기
 		else
 		{
-			// 기존 최상단 위젯 숨기기
-			DefocusTopWidget();
-
 			// 현재 위젯 보여주고 Z-Order 높이기
-			Widget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 			BringWidgetToFrontVisually(Widget);
+
+			// 캐싱된 위젯이 다시 열렸음을 알림
+			Widget->OnWidgetOpened();
 
 			// 최상단 위젯에 등록
 			WidgetStack.Push(Tag);
 		}
-		// 변경된 최상단 위젯에 Focus를 부여합니다.
-		FocusTopWidget();
 		// 입력 모드를 업데이트 합니다.
 		UpdateInputMode();
 	}
 	// 처음 위젯을 호출하는 경우
 	else
 	{
-		OpenWidget(Tag, ContextActor);
+		// 일반 위젯(인벤토리 등)은 즉시 열기
+		UECUserWidget* NewWidget = OpenWidget(Tag, ContextActor);
+       
+		if (NewWidget)
+		{
+			// 새로운 위젯이 정상적으로 열렸음을 알림
+			NewWidget->OnWidgetOpened();
+		}
 	}
 }
 
-void UUIManagerSubsystem::OpenWidget(FGameplayTag Tag, AActor* ContextActor)
+UECUserWidget* UUIManagerSubsystem::OpenWidget(FGameplayTag Tag, AActor* ContextActor)
 {
 	ULocalPlayer* LP = GetLocalPlayer();
-	if (!LP) return;
+	if (!LP) return nullptr;
 
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC || !PC->IsLocalController()) return;
+	if (!PC || !PC->IsLocalController()) return nullptr;
+
+	if (!ConfigData.WidgetMap.Contains(Tag)) return nullptr;
 
 	// 위젯 생성
 	UECUserWidget* Widget = CreateWidget<UECUserWidget>(PC, ConfigData.WidgetMap[Tag].WidgetClass);
-	if (Widget == nullptr) return;
+	if (Widget == nullptr) return nullptr;
 
 	// 필요한 모든 뷰모델을 주입 
 	for (TSubclassOf<UECViewModelBase> SourceVM : ConfigData.WidgetMap[Tag].ViewModels)
 	{
-		// ContextActor를 바탕으로 필요한 ViewModel을 생성
+		// ContextActor를 바탕으로 필요한 ViewModel을 생성 및 바인딩
 		UECViewModelBase* NewViewModel = UECViewModelFactoryLibrary::CreateViewModel(SourceVM, ContextActor, Widget);
 
 		if (NewViewModel)
 		{
 			// ViewModel 주입
 			Widget->InjectViewModel(NewViewModel);
+
+			// ViewModel 초기값 적용
+			NewViewModel->BroadcastInitialValues();
 		}
+	}
+
+	// 모든 뷰모델 주입을 완료한 후에 호출되는 이벤트입니다.
+	Widget->OnViewModelSet();
+
+	// 3층: System 레이어 (연출 전용: 페이드, 꿈 UI 등)
+	if (ConfigData.WidgetMap[Tag].LayerType == EWidgetLayerType::System)
+	{
+		Widget->AddToViewport(100); // 메인 레이아웃의 숨김 여부와 무관하게 무조건 화면 최상단에 덮음
+        
+		// 나중에 지울 수 있게 ActiveWidgets에만 등록하고, 
+		// 포커스/스택/입력 관리 로직은 건너뛰고 즉시 종료합니다!
+		ActiveWidgets.Add(Tag, Widget);
+		return Widget; 
 	}
 
 	// ==========================================================
@@ -219,9 +279,8 @@ void UUIManagerSubsystem::OpenWidget(FGameplayTag Tag, AActor* ContextActor)
 				HUDSlot->SetHorizontalAlignment(HAlign_Fill);
 				HUDSlot->SetVerticalAlignment(VAlign_Fill);
 			}
-            
 			ActiveWidgets.Add(Tag, Widget);
-			return; // HUD는 스택/입력 관리를 안 하므로 여기서 즉시 종료
+			return Widget; // HUD는 스택/입력 관리를 안 하므로 여기서 즉시 종료
 		}
 		else
 		{
@@ -231,6 +290,12 @@ void UUIManagerSubsystem::OpenWidget(FGameplayTag Tag, AActor* ContextActor)
 			{
 				WindowSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); 
 				WindowSlot->SetOffsets(FMargin(0.f, 0.f, 0.f, 0.f));
+			}
+
+			// 이전에 저장된 위치가 있다면 위젯에 덮어씌워 줍니다.
+			if (CachedWidgetPositions.Contains(Tag))
+			{
+				Widget->SetRenderTranslation(CachedWidgetPositions[Tag]);
 			}
 			
 			// 새로 생성된 창을 맨 앞에 표시합니다.
@@ -243,18 +308,35 @@ void UUIManagerSubsystem::OpenWidget(FGameplayTag Tag, AActor* ContextActor)
 		Widget->AddToViewport();
 	}
 
-	// 기존의 최상단 위젯의 Focus를 해제합니다.
-	DefocusTopWidget();
-
 	// 새로 만든 위젯 정보를 등록합니다.
 	ActiveWidgets.Add(Tag, Widget);
 	WidgetStack.Push(Tag);
 
-	// 새로 추가된 위젯에 Focus를 부여합니다.
-	FocusTopWidget();
-
 	// 입력 모드를 업데이트 합니다.
 	UpdateInputMode();
+
+	return Widget;
+}
+
+void UUIManagerSubsystem::CloseWidget(FGameplayTag Tag)
+{
+	// 현재 열려있는 위젯인지 확인
+	if (UECUserWidget** FoundWidget = ActiveWidgets.Find(Tag))
+	{
+		UECUserWidget* Widget = *FoundWidget;
+
+		if (Widget->IsVisible())
+		{
+			// 스택에서 제거하고 권한 뺏기
+			WidgetStack.Remove(Tag);
+
+			// 파괴 또는 숨김 (ConfigData.WidgetMap.Remove(Tag)는 하지 않습니다!)
+			DeactivateWidget(Tag, Widget);
+
+			// 입력 모드 갱신
+			UpdateInputMode();
+		}
+	}
 }
 
 void UUIManagerSubsystem::CloseTopWidget()
@@ -277,44 +359,20 @@ void UUIManagerSubsystem::CloseTopWidget()
 			return;
 		}
         
-		// 닫히는 위젯의 IMC 해제
-		ApplyWidgetInputContext(ConfigData.WidgetMap[TopTag], false);
 		// 위젯을 비활성화
 		DeactivateWidget(TopTag, Widget);
 		WidgetStack.Remove(TopTag);
 	}
-
-	// 새롭게 최상단으로 올라온 위젯에 Focus를 부여합니다.
-	FocusTopWidget();
 	
 	UpdateInputMode();
-}
-
-void UUIManagerSubsystem::ApplyWidgetInputContext(const FUIConfigWidget& Config, bool bIsOpening)
-{
-	// 특별히 덮어씌울 IMC가 없다면 무시합니다 (예: 인벤토리는 IMC 교체 불필요, 맵만 필요 등)
-	if (!Config.OverrideIMC) return;
-
-	if (ULocalPlayer* LP = GetLocalPlayer())
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
-		{
-			if (bIsOpening)
-			{
-				Subsystem->AddMappingContext(Config.OverrideIMC, Config.IMCPriority);
-			}
-			else
-			{
-				Subsystem->RemoveMappingContext(Config.OverrideIMC);
-			}
-		}
-	}
 }
 
 void UUIManagerSubsystem::BringWidgetToFrontVisually(UECUserWidget* Widget)
 {
 	if (Widget)
 	{
+		Widget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		
 		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot))
 		{
 			static int32 GlobalZOrder = 100;
@@ -360,26 +418,13 @@ void UUIManagerSubsystem::UpdateInputMode()
 	}
 }
 
-void UUIManagerSubsystem::FocusTopWidget()
-{
-	if (WidgetStack.IsEmpty())
-	{
-		return;
-	}
-
-	FGameplayTag TopTag = WidgetStack.Last();
-	ApplyWidgetInputContext(ConfigData.WidgetMap[TopTag], true);
-
-	// 새롭게 최상단으로 올라온 위젯이 밝아집니다.
-	if (UECUserWidget** NewTop = ActiveWidgets.Find(TopTag))
-	{
-		(*NewTop)->OnFocusGainedAnim();
-	}
-}
-
 void UUIManagerSubsystem::DeactivateWidget(FGameplayTag Tag, UECUserWidget* Widget)
 {
 	if (!Widget) return;
+
+	CachedWidgetPositions.Add(Tag, Widget->GetRenderTransform().Translation);
+	
+	Widget->OnWidgetClosed();
 
 	if (ConfigData.WidgetMap[Tag].CachePolicy == EWidgetCachePolicy::DestroyOnClose)
 	{
@@ -390,25 +435,6 @@ void UUIManagerSubsystem::DeactivateWidget(FGameplayTag Tag, UECUserWidget* Widg
 	{
 		Widget->SetVisibility(ESlateVisibility::Collapsed);
 		Widget->ClearAllChildren();
-		// Focus 획득 상태로 초기화
-		Widget->OnFocusGainedAnim();
-	}
-}
-
-void UUIManagerSubsystem::DefocusTopWidget()
-{
-	if (WidgetStack.IsEmpty())
-	{
-		return;
-	}
-
-	FGameplayTag TopTag = WidgetStack.Last();
-	ApplyWidgetInputContext(ConfigData.WidgetMap[TopTag], false);
-
-	// 기존 위젯의 Focus를 잃는 애니메이션을 실행합니다.
-	if (UECUserWidget** OldTop = ActiveWidgets.Find(TopTag))
-	{
-		(*OldTop)->OnFocusLostAnim();
 	}
 }
 
@@ -434,14 +460,11 @@ void UUIManagerSubsystem::UpdateFocusStack(UECUserWidget* FocusedWidget)
 	// 정식 등록된 Root 창이 맞고, 스택에 존재한다면 재정렬 실행
 	if (FoundTag.IsValid() && WidgetStack.Contains(FoundTag))
 	{
-		// 이미 최상단 위젯이라면 굳이 재정렬과 IMC 스왑을 할 필요가 없습니다.
+		// 이미 최상단 위젯이라면 굳이 재정렬 할 필요가 없습니다.
 		if (WidgetStack.Last() == FoundTag)
 		{
 			return;
 		}
-
-		// 기존 위젯 Focus 제거
-		DefocusTopWidget();
 
 		// 선택된 위젯을 스택 최상단으로 이동
 		WidgetStack.Remove(FoundTag);
@@ -449,9 +472,6 @@ void UUIManagerSubsystem::UpdateFocusStack(UECUserWidget* FocusedWidget)
 
 		// 위젯의 Z-Order 갱신
 		BringWidgetToFrontVisually(FocusedWidget);
-
-		// 선택된 위젯에 Focus 부여
-		FocusTopWidget();
 
 		// 마우스 포커스 갱신 (선택된 위젯에 입력 포커스 강제)
 		UpdateInputMode();

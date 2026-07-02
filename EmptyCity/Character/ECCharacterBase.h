@@ -74,5 +74,21 @@ protected:
 	
 	/** 직전 프레임의 이동 여부 — 상태가 바뀐 프레임에만 태그를 갱신하기 위한 캐시입니다. */
 	bool bIsMoving = false;
-	
+
+// ─────────────────────────────────────────────────────────────
+// Hit Stop
+// ─────────────────────────────────────────────────────────────
+public:
+	/** 데미지 처리 구간에서 히트 스탑을 처리합니다. */
+	void PlayHitStop(float TimeDuration = 0.3f, float TimeDilation = 0.05f);
+
+	UPROPERTY(EditAnywhere) // 블루프린트 테스트용
+	bool bCanPlayHitStop = true;
+
+private:
+	/** 히트 스탑이 완료된 후에 딜레이를 원상복구합니다. */
+	void RestoreTimeDilation();
+
+	/** 다단 히트 시 타이머를 덮어씌우기 위한 타이머 핸들 */
+	FTimerHandle HitStopTimerHandle;
 };

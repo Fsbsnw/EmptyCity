@@ -6,13 +6,14 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "ECGameplayTags.h"
-#include "Engine/OverlapResult.h"
 
 UECGameplayAbility_EnemyAttack::UECGameplayAbility_EnemyAttack()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	
 	AbilityTags.AddTag(ECGameplayTags::Ability_Skill_EnemyMeleeAttack);
+	WeaponTypeTag = ECGameplayTags::Weapon;
+	AttackTypeTag = ECGameplayTags::Attack;
 }
 
 void UECGameplayAbility_EnemyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -30,48 +31,48 @@ void UECGameplayAbility_EnemyAttack::ActivateAbility(const FGameplayAbilitySpecH
 void UECGameplayAbility_EnemyAttack::ExecuteHitCheck()
 {
 	AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	if (!IsValid(AvatarActor))
-	{
-		return;
-	}
+	if (!IsValid(AvatarActor)) return;
 
-	// 캐릭터 앞쪽 위치
-	const FVector Center = AvatarActor->GetActorLocation() + (AvatarActor->GetActorForwardVector() * AttackForwardOffset);
+	// 공격의 시작점 (캐릭터 위치)
+	const FVector StartLoc = AvatarActor->GetActorLocation();
+	// 공격의 끝점 (캐릭터 앞쪽 위치)
+	const FVector EndLoc = StartLoc + (AvatarActor->GetActorForwardVector() * AttackForwardOffset);
 
-	// 디버그용 Sphere 그리기 (에디터 전용)
 #if WITH_EDITOR
 	if (bDrawDebug)
 	{
-		DrawDebugSphere(GetWorld(), Center, AttackRadius, 16, FColor::Red, false, 2.f);
+		// 캡슐 형태로 궤적이 그려짐
+		DrawDebugCapsule(GetWorld(), StartLoc + (EndLoc - StartLoc) * 0.5f, (EndLoc - StartLoc).Size() * 0.5f + AttackRadius, AttackRadius, FRotationMatrix::MakeFromZ(EndLoc - StartLoc).ToQuat(), FColor::Red, false, 2.f);
 	}
 #endif
 
-	TArray<FOverlapResult> OverlapResults;
+	TArray<FHitResult> HitResults;
 
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(AvatarActor);
-
-	const bool bHit = GetWorld()->OverlapMultiByObjectType(
-		OverlapResults,
-		Center,
-		FQuat::Identity,
-		FCollisionObjectQueryParams(ECC_Pawn), // 임시 구현, 콜리전 채널 수정 필요
-		FCollisionShape::MakeSphere(AttackRadius),
-		QueryParams
-	);
 	
+	const bool bHit = GetWorld()->SweepMultiByObjectType(
+	   HitResults,
+	   StartLoc,
+	   EndLoc,
+	   FQuat::Identity,
+	   FCollisionObjectQueryParams(ECC_Pawn), // 콜리전 채널 수정 필요
+	   FCollisionShape::MakeSphere(AttackRadius),
+	   QueryParams
+	);
+    
 	if (bHit)
 	{
-		// 찾은 타겟들을 순회하며 데미지 적용
-		for (const FOverlapResult& HitResult : OverlapResults)
+		for (const FHitResult& HitResult : HitResults)
 		{
 			AActor* TargetActor = HitResult.GetActor();
-			HandleMeleeHit(TargetActor);
+			
+			HandleMeleeHit(TargetActor, HitResult); 
 		}
 	}
 }
 
-void UECGameplayAbility_EnemyAttack::HandleMeleeHit(AActor* TargetActor)
+void UECGameplayAbility_EnemyAttack::HandleMeleeHit(AActor* TargetActor, const FHitResult& HitResult)
 {
 	if (!TargetActor)
 	{
@@ -86,6 +87,29 @@ void UECGameplayAbility_EnemyAttack::HandleMeleeHit(AActor* TargetActor)
 		return;
 	}
 
+	// @TODO: Blocking 관련 태그 구현
+	// if (TargetASC->HasMatchingGameplayTag(ECGameplayTags::Status_Blocking) && StaminaDamageEffectClass)
+	// {
+	// 	// EffectSpec 생성
+	// 	FGameplayEffectSpecHandle DamageSpecHandle = MakeOutgoingGameplayEffectSpec(StaminaDamageEffectClass, GetAbilityLevel());
+	//
+	// 	if (!DamageSpecHandle.IsValid())
+	// 	{
+	// 		return;
+	// 	}
+	//
+	// 	// 데미지 값 설정
+	// 	float ScaledStaminaDamage = StaminaDamage.GetValueAtLevel(GetAbilityLevel());
+	// 	DamageSpecHandle.Data->SetSetByCallerMagnitude(ECGameplayTags::SetByCaller_StaminaDamage, ScaledStaminaDamage);
+	//
+	// 	// Source 정보 설정
+	// 	DamageSpecHandle.Data->GetContext().AddSourceObject(this);
+	//
+	// 	// 스태미나 데미지 적용
+	// 	SourceASC->ApplyGameplayEffectSpecToTarget(*DamageSpecHandle.Data.Get(), TargetASC);
+	// 	return;
+	// }
+
 	// EffectSpec 생성
 	FGameplayEffectSpecHandle DamageSpecHandle = MakeOutgoingGameplayEffectSpec(DamageEffectClass, GetAbilityLevel());
 
@@ -94,13 +118,19 @@ void UECGameplayAbility_EnemyAttack::HandleMeleeHit(AActor* TargetActor)
 		return;
 	}
 
+	FGameplayTagContainer DynamicTags;
+	DynamicTags.AddTag(WeaponTypeTag);
+	DynamicTags.AddTag(AttackTypeTag);   
+
+	DamageSpecHandle.Data->AppendDynamicAssetTags(DynamicTags);
+
 	// 데미지 값 설정
 	float ScaledDamage = Damage.GetValueAtLevel(GetAbilityLevel());
 	DamageSpecHandle.Data->SetSetByCallerMagnitude(ECGameplayTags::SetByCaller_Damage, ScaledDamage);
-	
-	// Source 정보 설정
-	DamageSpecHandle.Data->GetContext().AddSourceObject(this);
 
+	FGameplayEffectContextHandle ContextHandle = DamageSpecHandle.Data->GetContext();
+	ContextHandle.AddHitResult(HitResult);
+	
 	// 데미지 적용
 	SourceASC->ApplyGameplayEffectSpecToTarget(*DamageSpecHandle.Data.Get(), TargetASC);
 }

@@ -11,7 +11,6 @@ UECGameplayAbility_GrantEliteBuff::UECGameplayAbility_GrantEliteBuff()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 
-	// 따로 GE 클래스를 추가해야 돼서 CDO로 제한하지 않습니다.
 	FAbilityTriggerData TriggerData;
 	TriggerData.TriggerTag = ECGameplayTags::Ability_Skill_GrantEliteBuff;
 	TriggerData.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;

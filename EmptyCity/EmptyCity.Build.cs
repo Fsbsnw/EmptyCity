@@ -24,7 +24,11 @@ public class EmptyCity : ModuleRules
 			"NavigationSystem",
 			"Niagara",
 			"ModularGameplay",
-			"ModelViewViewModel"
+			"ModelViewViewModel",
+			"Slate", 
+			"SlateCore",
+			"MediaAssets",
+			"LevelSequence"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });

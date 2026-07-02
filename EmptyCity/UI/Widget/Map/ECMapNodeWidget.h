@@ -27,6 +27,10 @@ protected:
 	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
 public:
+	// 부모 맵 위젯이 노드의 상태를 동기화할 때 부르는 함수
+	void SyncNodeState(bool bIsUnlocked, bool bIsNewReveal);
+	
+public:
 	/** 내 노드의 고유 식별 태그 (예: MapNode.Location.Home) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Node|Info")
 	FGameplayTag MyNodeTag;
@@ -51,4 +55,16 @@ public:
 	/** 선택 해제 연출 (WBP에서 애니메이션 재생 등 구현) */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Node|Visual")
 	void PlayUnhighlightAnim();
+
+	// 해금 상태에 따른 시각적 처리 (자물쇠 아이콘 켜기/끄기, 버튼 비활성화 등)
+	UFUNCTION(BlueprintImplementableEvent, Category = "Node|Visual")
+	void UpdateUnlockVisual(bool bIsUnlocked);
+
+	// 새로운 해금 연출 (반짝거리는 N 마크 띄우기 등)
+	UFUNCTION(BlueprintImplementableEvent, Category = "Node|Visual")
+	void PlayNewRevealAnim();
+
+	// 새로운 해금 연출 중지 (루프 애니메이션 초기화)
+	UFUNCTION(BlueprintImplementableEvent, Category = "Node|Visual")
+	void StopNewRevealAnim();
 };
