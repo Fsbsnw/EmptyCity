@@ -15,6 +15,8 @@
 <br><br>
 
 > ### AI Perception 기반의 플레이어 탐지 및 공격
+>> 시각 센서를 활용하여 플레이어를 감지합니다.
+>> 
 >> <img width="400" height="225" alt="공격" src="https://github.com/user-attachments/assets/79e459f9-ee5c-4aa3-887d-6b680e37545a" />
 >>
 >> [ECEnemyAIController.cpp](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/Character/Enemy/AI/ECEnemyAIController.cpp#L125)
@@ -22,7 +24,7 @@
 > <br><br>
 >
 > ### Enemy 스턴
->> GIF
+>> 스턴 GE이 적용될 때 스턴 태그를 활용하여 스턴 상태를 관리하며, 추가 공격에 따라 스턴 시간을 증가시킵니다.
 >>
 >> [ECGameplayAbility_Stun.cpp](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/AbilitySystem/Ability/Enemy/ECGameplayAbility_Stun.cpp)
 >
@@ -52,24 +54,25 @@
 > ### 스택 방식의 Close 기능
 >> 위젯의 Close 입력이 들어왔을 때, 자식이 있는 경우 우선적으로 처리합니다.
 >> 
->> [ECUserWidget.cpp - HandleCloseRequest](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/ECUserWidget.cpp#L67)
+>> [ECUserWidget.cpp - HandleCloseRequest](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/ECUserWidget.cpp#L84)
 >>
->> [UIManagerSubsystem.cpp - CloseTopWidget](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L275)
+>> [UIManagerSubsystem.cpp - CloseTopWidget](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L342)
 >
 > <br><br>
 > 
 > ### 위젯 드래그 및 포커싱
->> 위젯에 마우스 입력이 들어왔을 때, 포커스를 획득/해제합니다.
+>> 마우스 입력에 따라 Stack 구조로 최상위 위젯 UI를 관리합니다.
 >>
 >> <img width="400" height="225" alt="드래그 포커스" src="https://github.com/user-attachments/assets/98760d6c-b777-4efe-8498-b9898652c62d" />
 >>
->> [ECUserWidget.cpp - NativeOnPreviewMouseButtonDown](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/ECUserWidget.cpp#L96)
+>> [ECUserWidget.cpp - NativeOnPreviewMouseButtonDown](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/ECUserWidget.cpp#L113)
 >>
->> [UIManagerSubsystem.cpp - UpdateFocusStack](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L415)
+>> [UIManagerSubsystem.cpp - UpdateFocusStack](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L441)
 >
 > <br><br>
 >
 > ### 위젯의 키보드 입력 기능
+>> 맵 위젯의 키 입력 방향에 따라 미리 정의된 맵 노드로 포커싱을 변경합니다.
 >> 
 >> <img width="400" height="225" alt="Video Project 2" src="https://github.com/user-attachments/assets/22bbe2c5-f105-435b-a9b1-524ef55a0788" />
 >> 
@@ -78,7 +81,7 @@
 > <br><br>
 >
 >> ### 해금 시스템
->> 잠김, 해금, New 해금 상태
+>> 잠김, 해금, New 해금 상태를 관리하며 새로 해금됐지만 해금 연출을 확인하지 않은 경우를 추가했습니다.
 >> 
 >> <img width="400" height="225" alt="해금" src="https://github.com/user-attachments/assets/25c1533c-32a4-416d-9bdc-eedd6717f3bf" />
 >>
@@ -87,6 +90,7 @@
 > <br><br>
 >
 >> ### 인벤토리 위젯
+>> Lyra 기반 인벤토리 구조를 활용하여 Item Instance의 UI Fragment 정보를 슬롯 위젯에 표시했습니다.
 >> 
 >> <img width="400" height="225" alt="인벤토리" src="https://github.com/user-attachments/assets/e98e1876-4cc9-4d58-b767-a55e4d42fadf" />
 >>
@@ -95,10 +99,8 @@
 > <br><br>
 >
 >> ### 맵 위젯 확대 축소
+>> 마우스 위치를 기준으로 확대/축소되도록 Scale 변화 비율에 따라 Translation을 보정했습니다.
 >> 
 >> <img width="400" height="225" alt="pannable맵" src="https://github.com/user-attachments/assets/5d42c727-6894-4337-9cc1-31a6f9b6d998" />
 >>
 >> [ECPannableMapWidget.cpp](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/Map/ECPannableMapWidget.cpp)
-
-
-
