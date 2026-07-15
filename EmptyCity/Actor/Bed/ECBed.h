@@ -9,6 +9,7 @@
 #include "Interaction/InteractionOption.h"
 #include "ECBed.generated.h"
 
+class UUIManagerSubsystem;
 class UBoxComponent;
 class FInteractionOptionBuilder;
 struct FInteractionQuery;
@@ -86,7 +87,7 @@ public:
 public:
 	/** BedMenu 위젯을 보여줍니다. */
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
-	void ShowBedMenu();
+	void ShowBedMenu(APlayerController* PC);
 
 	/** BedMenu 위젯을 닫습니다. */
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
@@ -132,4 +133,9 @@ public:
 private:
 	/** 현재 진행 중인 수면 시퀀스 상태를 추적하는 내부 변수입니다. */
 	ESleepPhase CurrentSleepPhase = ESleepPhase::None;
+
+	/** 현재 침대 UI 및 수면 시퀀스를 진행 중인 로컬 플레이어입니다. */
+	TWeakObjectPtr<APlayerController> ActivePlayerController;
+
+	UUIManagerSubsystem* GetActiveUIManager() const;
 };

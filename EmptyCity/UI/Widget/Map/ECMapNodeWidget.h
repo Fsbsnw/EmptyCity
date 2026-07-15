@@ -8,7 +8,7 @@
 #include "ECMapNodeWidget.generated.h"
 
 // 맵 노드가 클릭되었을 때 발생시킬 델리게이트 선언
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnMapNodeClicked, class UECMapNodeWidget*);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnMapNodeClicked, UECMapNodeWidget*);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnMapNodeHovered, UECMapNodeWidget*);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnMapNodeUnhovered, UECMapNodeWidget*);
 
@@ -67,4 +67,11 @@ public:
 	// 새로운 해금 연출 중지 (루프 애니메이션 초기화)
 	UFUNCTION(BlueprintImplementableEvent, Category = "Node|Visual")
 	void StopNewRevealAnim();
+
+public:
+	FVector2D GetMapLocalPosition() const { return MapLocalPosition; }
+
+protected:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Map Node")
+	FVector2D MapLocalPosition;
 };

@@ -9,6 +9,7 @@
 #include "Inventory/IECInventory.h"
 #include "ECInventoryContainer.generated.h"
 
+class UUIManagerSubsystem;
 class UBoxComponent;
 struct FInitialInventoryItem;
 
@@ -40,7 +41,7 @@ protected:
 // ─────────────────────────────────────────────────────────────
 public:	
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
-	void ShowInventory();
+	void ShowInventory(APlayerController* PC);
 
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	void HideInventory(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
@@ -87,4 +88,9 @@ protected:
 private:
 	/** 게임 시작 시 InitialInventoryItems를 인벤토리에 등록 */
 	void AddInitialInventory();
+
+	/** 현재 상호작용을 진행 중인 로컬 플레이어입니다. */
+	TWeakObjectPtr<APlayerController> ActivePlayerController;
+
+	UUIManagerSubsystem* GetActiveUIManager() const;
 };

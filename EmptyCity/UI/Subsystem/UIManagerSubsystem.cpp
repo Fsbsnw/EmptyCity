@@ -11,11 +11,23 @@
 #include "Components/OverlaySlot.h"
 #include "Data/UI/UIConfigDataAsset.h"
 #include "Framework/Application/NavigationConfig.h"
+#include "Subsystem/ECRegionSubsystem.h"
 #include "UI/ViewModel/ECViewModelBase.h"
 #include "UI/ViewModel/ECViewModelFactoryLibrary.h"
 #include "UI/Widget/ECMainLayoutWidget.h"
 #include "UI/Widget/ECUserWidget.h"
 #include "UI/Widget/FadeScreen/ECFadeScreenWidget.h"
+#include "UI/Widget/Notification/ECNotificationHostWidget.h"
+
+UUIManagerSubsystem* UUIManagerSubsystem::Get(const APlayerController* PlayerController)
+{
+	if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
+	{
+		return nullptr;
+	}
+
+	return ULocalPlayer::GetSubsystem<UUIManagerSubsystem>(PlayerController->GetLocalPlayer());
+}
 
 // =========================================================================
 // 화면 전환 연출

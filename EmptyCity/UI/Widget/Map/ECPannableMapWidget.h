@@ -3,9 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "UI/Widget/ECUserWidget.h"
 #include "ECPannableMapWidget.generated.h"
 
+class UECMapNodeWidget;
 class UCanvasPanel;
 class UImage;
 /**
@@ -15,7 +17,8 @@ UCLASS()
 class EMPTYCITY_API UECPannableMapWidget : public UECUserWidget
 {
 	GENERATED_BODY()
-protected:	
+protected:
+	virtual void NativeConstruct() override;
 	/**
 	 * 맵을 Panning하기 위한 함수들입니다.
 	 */
@@ -23,7 +26,36 @@ protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+public:
+	UFUNCTION(BlueprintCallable)
+	void FocusMapAtLocalPosition(const FVector2D& MapLocalPosition, float TargetScale);
+
+	UPROPERTY(EditAnywhere)
+	float TargetZoomInScale = 2.f;
+
+private:
+	FWidgetTransform GetClampedMapTransform(FWidgetTransform Transform) const;
+
+private:
+	bool bIsFocusAnimating = false;
+
+	float FocusAnimElapsed = 0.f;
+
+	UPROPERTY(EditAnywhere, Category="Map|Focus")
+	float FocusAnimDuration = 0.35f;
+
+	FWidgetTransform FocusStartTransform;
+	FWidgetTransform FocusTargetTransform;
+
+	UPROPERTY()
+	TMap<FGameplayTag, UECMapNodeWidget*> AllMapNodes;
+
+	UFUNCTION()
+	void HandleMapNodeClicked(UECMapNodeWidget* MapNodeWidget);
+	
 	void ClampMapTransform();
 	
 protected:

@@ -11,6 +11,7 @@
 #include "Input/ECInputComponent.h"
 #include "Inventory/ECInventoryManagerComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "UI/IndicatorSystem/ECIndicatorManagerComponent.h"
 #include "UI/Subsystem/UIManagerSubsystem.h"
 
 AECPlayerController::AECPlayerController()
@@ -26,11 +27,21 @@ AECPlayerController::AECPlayerController()
 	{
 		QuickBarComponent = CreateDefaultSubobject<UECQuickBarComponent>(TEXT("QuickBarComponent"));
 	}
+
+	// IndicatorManagerComponent를 초기화합니다.
+	{
+		IndicatorManagerComponent =	CreateDefaultSubobject<UECIndicatorManagerComponent>(TEXT("IndicatorManagerComponent"));
+	}
 }
 
 UECInventoryManagerComponent* AECPlayerController::GetInventoryManagerComponent() const
 {
 	return InventoryManagerComponent;
+}
+
+UECIndicatorManagerComponent* AECPlayerController::GetIndicatorManagerComponent() const
+{
+	return IndicatorManagerComponent;
 }
 
 void AECPlayerController::PostProcessInput(const float DeltaTime, const bool bGamePaused)

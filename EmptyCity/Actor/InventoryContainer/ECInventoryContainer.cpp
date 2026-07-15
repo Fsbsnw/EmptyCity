@@ -43,28 +43,42 @@ void AECInventoryContainer::BeginPlay()
 	BoxCollision->OnComponentEndOverlap.AddDynamic(this, &ThisClass::HideInventory);
 }
 
-void AECInventoryContainer::ShowInventory()
+UUIManagerSubsystem* AECInventoryContainer::GetActiveUIManager() const
 {
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC) return;
+	return UUIManagerSubsystem::Get(ActivePlayerController.Get());
+}
 
-	UUIManagerSubsystem* UIManager = PC->GetLocalPlayer()->GetSubsystem<UUIManagerSubsystem>();
-	if (!UIManager) return;
-
-	UIManager->OpenDynamicWidget(InventoryUITag, InventoryWidget, this);
+void AECInventoryContainer::ShowInventory(APlayerController* PC)
+{
+	if (UUIManagerSubsystem* UIManager = UUIManagerSubsystem::Get(PC))
+	{
+		ActivePlayerController = PC;
+        
+		UIManager->OpenDynamicWidget(InventoryUITag, InventoryWidget, this);
+	}
 }
 
 void AECInventoryContainer::HideInventory(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	if (!OtherActor || !OtherActor->IsA(AECPlayer::StaticClass())) return;
-	
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC) return;
+	APawn* PlayerPawn = Cast<APawn>(OtherActor);
+	if (PlayerPawn == nullptr)
+	{
+		return;
+	}
 
-	UUIManagerSubsystem* UIManager = PC->GetLocalPlayer()->GetSubsystem<UUIManagerSubsystem>();
-	if (!UIManager) return;
+	APlayerController* LeavingPC = Cast<APlayerController>(PlayerPawn->GetController());
 
-	UIManager->CloseDynamicWidget(InventoryUITag);
+	if (LeavingPC == nullptr || LeavingPC != ActivePlayerController.Get())
+	{
+		return;
+	}
+
+	if (UUIManagerSubsystem* UIManager = GetActiveUIManager())
+	{
+		UIManager->CloseDynamicWidget(InventoryUITag);
+	}
+
+	ActivePlayerController.Reset();
 }
 
 void AECInventoryContainer::AddInitialInventory()

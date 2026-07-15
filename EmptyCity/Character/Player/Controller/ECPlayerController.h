@@ -7,6 +7,7 @@
 #include "Inventory/IECInventory.h"
 #include "ECPlayerController.generated.h"
 
+class UECIndicatorManagerComponent;
 struct FInteractionOption;
 class UECQuickBarComponent;
 class UECInventoryManagerComponent;
@@ -46,11 +47,6 @@ protected:
 // ─────────────────────────────────────────────────────────────
 // UI 라이프사이클 제어
 // ─────────────────────────────────────────────────────────────
-
-public:
-	// 상호작용 UI를 갱신하라고 블루프린트에 알려주는 이벤트
-	UFUNCTION(BlueprintImplementableEvent, Category = "Interaction|UI") // 임시로 사용
-	void K2_UpdateInteractionUI(bool bCanInteract, const TArray<FInteractionOption>& Options);
 	
 protected:
 	/** 게임 진입 시 GameState의 데이터를 바탕으로 UI 시스템 전체를 총괄하여 초기화하는 함수입니다. */
@@ -67,6 +63,17 @@ protected:
 private:
 	// UI 전담 입력 처리 함수
 	void Input_UIAction(FGameplayTag InputTag);
+	
+// ─────────────────────────────────────────────────────────────
+// Indicator Component
+// ─────────────────────────────────────────────────────────────
+	
+public:
+	UECIndicatorManagerComponent* GetIndicatorManagerComponent() const;
+
+private:
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UECIndicatorManagerComponent> IndicatorManagerComponent;
 
 // ─────────────────────────────────────────────────────────────
 // 인게임 연출 제어

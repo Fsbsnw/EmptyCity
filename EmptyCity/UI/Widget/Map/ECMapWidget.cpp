@@ -7,7 +7,6 @@
 #include "ECMapNodeWidget.h"
 #include "Blueprint/SlateBlueprintLibrary.h"
 #include "Blueprint/WidgetTree.h"
-#include "Components/CanvasPanelSlot.h"
 #include "Subsystem/ECProgressionSubsystem.h"
 #include "UI/Widget/ECMapNodeInfoWidget.h"
 

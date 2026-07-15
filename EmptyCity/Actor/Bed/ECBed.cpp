@@ -4,7 +4,6 @@
 #include "Actor/Bed/ECBed.h"
 
 #include "ECGameplayTags.h"
-#include "Character/Player/ECPlayer.h"
 #include "Character/Player/Controller/ECPlayerController.h"
 #include "Components/BoxComponent.h"
 #include "UI/Subsystem/UIManagerSubsystem.h"
@@ -32,43 +31,57 @@ void AECBed::BeginPlay()
     BoxCollision->OnComponentEndOverlap.AddDynamic(this, &ThisClass::HideBedMenu);
 }
 
-void AECBed::ShowBedMenu()
+UUIManagerSubsystem* AECBed::GetActiveUIManager() const
 {
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (!PC) return;
+    return UUIManagerSubsystem::Get(ActivePlayerController.Get());
+}
 
-    UUIManagerSubsystem* UIManager = PC->GetLocalPlayer()->GetSubsystem<UUIManagerSubsystem>();
-    if (!UIManager) return;
-
-    UIManager->OpenDynamicWidget(ECGameplayTags::InputTag_UI_Bed, BedMenuWidgetConfig, this);
+void AECBed::ShowBedMenu(APlayerController* PC)
+{
+    if (UUIManagerSubsystem* UIManager = UUIManagerSubsystem::Get(PC))
+    {
+        ActivePlayerController = PC;
+        
+        UIManager->OpenDynamicWidget(ECGameplayTags::InputTag_UI_Bed, BedMenuWidgetConfig, this);
+    }
 }
 
 void AECBed::HideBedMenu(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-    if (!OtherActor || !OtherActor->IsA(AECPlayer::StaticClass())) return;
-    
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (!PC) return;
+    APawn* PlayerPawn = Cast<APawn>(OtherActor);
+    if (PlayerPawn == nullptr)
+    {
+        return;
+    }
 
-    UUIManagerSubsystem* UIManager = PC->GetLocalPlayer()->GetSubsystem<UUIManagerSubsystem>();
-    if (!UIManager) return;
+    APlayerController* LeavingPC = Cast<APlayerController>(PlayerPawn->GetController());
 
-    UIManager->CloseDynamicWidget(ECGameplayTags::InputTag_UI_Bed);
+    if (LeavingPC == nullptr || LeavingPC != ActivePlayerController.Get())
+    {
+        return;
+    }
+
+    if (UUIManagerSubsystem* UIManager = GetActiveUIManager())
+    {
+        UIManager->CloseDynamicWidget(ECGameplayTags::InputTag_UI_Bed);
+    }
+
+    ActivePlayerController.Reset();
 }
 
 void AECBed::StartSleepSequence()
 {
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (!PC || !PC->GetLocalPlayer()) return;
-
-    UUIManagerSubsystem* UIManager = PC->GetLocalPlayer()->GetSubsystem<UUIManagerSubsystem>();
-    if (!UIManager) return;
+    UUIManagerSubsystem* UIManager = GetActiveUIManager();
+    if (UIManager == nullptr)
+    {
+        return;
+    }
 
     // 침대 메뉴를 닫습니다.
     UIManager->CloseDynamicWidget(ECGameplayTags::InputTag_UI_Bed);
 
     // 캐릭터, UI 입력 비활성화
-    if (AECPlayerController* ECPC = Cast<AECPlayerController>(PC))
+    if (AECPlayerController* ECPC = Cast<AECPlayerController>(ActivePlayerController.Get()))
     {
         ECPC->SetCinematicInputLocked(true);
     }
@@ -91,7 +104,7 @@ void AECBed::OnFadeOutCompleted()
         ShowSleepUI();
     }
 
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    APlayerController* PC = ActivePlayerController.Get();
     if (PC)
     {
         // 침대 액터가 플레이어의 입력을 가로챕니다. 
@@ -127,24 +140,24 @@ void AECBed::OnWakeUpInputReceived()
 void AECBed::EndSleepSequence()
 {
     // 키보드 입력이 감지되면 더이상 침대와 관련된 입력을 받지 않습니다.
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (PC)
+    if (APlayerController* PC = ActivePlayerController.Get())
     {
         DisableInput(PC);
     }
-    UUIManagerSubsystem* UIManager = PC->GetLocalPlayer()->GetSubsystem<UUIManagerSubsystem>();
-    if (!UIManager) return;
+    
+    UUIManagerSubsystem* UIManager = GetActiveUIManager();
+    if (UIManager == nullptr)
+    {
+        return;
+    }
     
     UIManager->PlayFadeIn(FOnFadeEvent::CreateUObject(this, &ThisClass::OnFadeInCompleted), 0.5f);
 }
 
 void AECBed::OnFadeInCompleted()
 {
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (!PC) return;
-
     // 캐릭터, UI 입력을 활성화합니다.
-    if (AECPlayerController* ECPC = Cast<AECPlayerController>(PC))
+    if (AECPlayerController* ECPC = Cast<AECPlayerController>(ActivePlayerController.Get()))
     {
         ECPC->SetCinematicInputLocked(false);
     }
@@ -152,36 +165,44 @@ void AECBed::OnFadeInCompleted()
 
 void AECBed::ShowDreamUI()
 {
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    UUIManagerSubsystem* UIManager = PC->GetLocalPlayer()->GetSubsystem<UUIManagerSubsystem>();
-    if (!UIManager) return;
+    UUIManagerSubsystem* UIManager = GetActiveUIManager();
+    if (UIManager == nullptr)
+    {
+        return;
+    }
 
     UIManager->OpenDynamicWidget(ECGameplayTags::InputTag_UI_Dream, DreamWidgetConfig);
 }
 
 void AECBed::HideDreamUI()
 {
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    UUIManagerSubsystem* UIManager = PC->GetLocalPlayer()->GetSubsystem<UUIManagerSubsystem>();
-    if (!UIManager) return;
+    UUIManagerSubsystem* UIManager = GetActiveUIManager();
+    if (UIManager == nullptr)
+    {
+        return;
+    }
 
     UIManager->CloseDynamicWidget(ECGameplayTags::InputTag_UI_Dream);
 }
 
 void AECBed::ShowSleepUI()
 {
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    UUIManagerSubsystem* UIManager = PC->GetLocalPlayer()->GetSubsystem<UUIManagerSubsystem>();
-    if (!UIManager) return;
+    UUIManagerSubsystem* UIManager = GetActiveUIManager();
+    if (UIManager == nullptr)
+    {
+        return;
+    }
 
     UIManager->OpenDynamicWidget(ECGameplayTags::InputTag_UI_Sleep, SleepWidgetConfig);
 }
 
 void AECBed::HideSleepUI()
 {
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    UUIManagerSubsystem* UIManager = PC->GetLocalPlayer()->GetSubsystem<UUIManagerSubsystem>();
-    if (!UIManager) return;
+    UUIManagerSubsystem* UIManager = GetActiveUIManager();
+    if (UIManager == nullptr)
+    {
+        return;
+    }
 
     UIManager->CloseDynamicWidget(ECGameplayTags::InputTag_UI_Sleep);
 }

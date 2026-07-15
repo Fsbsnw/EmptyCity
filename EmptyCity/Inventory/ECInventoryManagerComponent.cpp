@@ -1,6 +1,10 @@
 ﻿#include "ECInventoryManagerComponent.h"
 #include "ECInventoryItemDefinition.h"
 #include "ECInventoryItemInstance.h"
+#include "Fragment/InventoryFragment_ItemSlotIcon.h"
+#include "Subsystem/ECGameplayMessageSubsystem.h"
+#include "Subsystem/ECMessageTypes.h"
+
 
 UECInventoryItemInstance* FInventoryList::AddEntry(TSubclassOf<UECInventoryItemDefinition> ItemDef, int32 StackCount)
 {
@@ -51,6 +55,26 @@ UECInventoryItemInstance* UECInventoryManagerComponent::AddItemDefinition(TSubcl
 	{
 		Result = InventoryList.AddEntry(ItemDef, StackCount);
 		OnInventoryUpdated.Broadcast();
+
+		APlayerController* PC = Cast<APlayerController>(GetOwner());
+		if (!PC)
+		{
+			return Result;
+		}
+		
+		const UECInventoryItemDefinition* ItemDefCDO = ItemDef->GetDefaultObject<UECInventoryItemDefinition>();
+		const UInventoryFragment_ItemSlotIcon* IconFragment =
+			Cast<UInventoryFragment_ItemSlotIcon>(ItemDefCDO->FindFragmentByClass(UInventoryFragment_ItemSlotIcon::StaticClass()));
+		
+		FECNotificationMessage Message;
+		Message.TargetPlayer = PC->PlayerState;
+		Message.TargetChannel = TAG_Notification_ItemAcquired;
+		Message.PayloadTag = TAG_Notification_ItemAcquired_Normal;
+		Message.PayloadMessage = IconFragment->ItemName;
+		Message.PayloadValue = StackCount;
+		Message.PayloadItemBrush = IconFragment->ItemBrush;
+		UECGameplayMessageSubsystem& MessageSubsystem = UECGameplayMessageSubsystem::Get(this);
+		MessageSubsystem.BroadcastMessage(TAG_AddNotification_Message, Message);
 	}
 	return Result;
 }

@@ -8,6 +8,8 @@
 #include "Subsystems/LocalPlayerSubsystem.h"
 #include "UIManagerSubsystem.generated.h"
 
+struct FECPopupInfo;
+class UECPopupWidget;
 class UECUserWidget;
 class UECMainLayoutWidget;
 
@@ -22,8 +24,11 @@ UCLASS()
 class EMPTYCITY_API UUIManagerSubsystem : public ULocalPlayerSubsystem
 {
 	GENERATED_BODY()
-	
 public:
+	/** 지정한 로컬 플레이어 컨트롤러의 UIManagerSubsystem을 반환합니다. */
+	static UUIManagerSubsystem* Get(const APlayerController* PlayerController);
+	
+public:	
 	/** 현재 Map Level에서 사용될 위젯의 정보를 저장합니다. */
 	void InitializeUIConfig(const FUIConfigData& UIConfig);
 

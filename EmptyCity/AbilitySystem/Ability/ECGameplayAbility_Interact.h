@@ -94,8 +94,7 @@ protected:
 	UPROPERTY(BlueprintReadWrite)
 	TArray<FInteractionOption> CurrentOptions;
 
-	/*/** 화면에 상호작용 위치를 표시해 주는 인디케이터(아이콘) 목록입니다. #1#
+	/** 화면에 상호작용 위치를 표시해 주는 인디케이터(아이콘) 목록입니다. */
 	UPROPERTY()
-	TArray<TObjectPtr<UIndicatorDescriptor>> Indicators;*/
-
+	TArray<TObjectPtr<UIndicatorDescriptor>> Indicators;
 };
