@@ -41,6 +41,8 @@
 * [해금 시스템](#해금-시스템)
 * [인벤토리 위젯](#인벤토리-위젯)
 * [맵 위젯 확대 축소](#맵-위젯-확대-축소)
+* [오브젝트 인디케이터](#오브젝트-인디케이터)
+* [게임플레이 알림 시스템](#게임플레이-알림-시스템)
 
 <br><br>
 
@@ -104,3 +106,31 @@
 >> <img width="400" height="225" alt="pannable맵" src="https://github.com/user-attachments/assets/5d42c727-6894-4337-9cc1-31a6f9b6d998" />
 >>
 >> [ECPannableMapWidget.cpp](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/Map/ECPannableMapWidget.cpp)
+>
+> <br><br>
+>
+>> ### 오브젝트 인디케이터
+>> 플레이어 입력으로 열고 닫는 기존 UI와 달리, 상호작용 대상의 월드 위치를 기준으로 표시되는 UI가 필요했습니다.
+>> Lyra의 Indicator System을 분석하여 프로젝트에 필요한 구조를 이식했으며, IndicatorDescriptor에 표시 대상과 위젯 정보를 전달하고 IndicatorManagerComponent에서 생성 및 제거를 관리하도록 구성했습니다.
+>> 이를 활용하여 탐색된 상호작용 대상의 위치에 상호작용 텍스트를 표시했습니다.
+>> 
+>> <img width="1527" height="813" alt="Indicator-Interaction2" src="https://github.com/user-attachments/assets/5b4c3ce1-cd44-4c04-980c-fefac81f482c" />
+>>
+>> [ECGameplayAbility_Interact.cpp - UpdateInteractions](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/AbilitySystem/Ability/ECGameplayAbility_Interact.cpp#L69)
+>> 
+>> [ECIndicatorManagerComponent.cpp](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/IndicatorSystem/ECIndicatorManagerComponent.cpp)
+>
+> <br><br>
+>
+>> ### 게임플레이 알림 시스템
+>> 아이템 획득, 지역 이동, 시간대 변경 등 서로 다른 게임플레이 시스템에서 발생하는 이벤트를 UI에 표시하기 위해 메시지 기반 알림 구조를 구성했습니다.
+>> Lyra의 Gameplay Message System을 프로젝트에 필요한 범위로 간소화하여 이식했으며, 송신자는 GameplayTag 채널과 메시지 데이터만 전달하고 알림 Host Widget이 메시지를 수신하여 실제 알림 위젯을 생성하도록 분리했습니다.
+>> 이를 통해 각 게임플레이 시스템이 알림 위젯 클래스와 생성 방식을 직접 참조하지 않도록 구성했습니다.
+>>
+>> <img width="1454" height="629" alt="알림시스템-지역" src="https://github.com/user-attachments/assets/f2b28efc-b6b8-4814-b22c-d8e6cbb15593" />
+
+>> <img width="1454" height="629" alt="알림시스템-아이템획득" src="https://github.com/user-attachments/assets/a4f9f1f0-7489-4611-9a4c-2f0501efcf5e" />
+>>
+>> [ECGameplayMessageSubsystem.cpp](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/Subsystem/ECGameplayMessageSubsystem.cpp)
+>> 
+>> [ECNotificationHostWidget.cpp](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/Notification/ECNotificationHostWidget.cpp)
