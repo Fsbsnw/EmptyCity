@@ -58,7 +58,7 @@
 >> 
 >> [ECUserWidget.cpp - HandleCloseRequest](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/ECUserWidget.cpp#L84)
 >>
->> [UIManagerSubsystem.cpp - CloseTopWidget](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L342)
+>> [UIManagerSubsystem.cpp - CloseTopWidget](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L369)
 >
 > <br><br>
 > 
@@ -69,7 +69,7 @@
 >>
 >> [ECUserWidget.cpp - NativeOnPreviewMouseButtonDown](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Widget/ECUserWidget.cpp#L113)
 >>
->> [UIManagerSubsystem.cpp - UpdateFocusStack](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L441)
+>> [UIManagerSubsystem.cpp - UpdateFocusStack](https://github.com/Fsbsnw/EmptyCity/blob/main/EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp#L453)
 >
 > <br><br>
 >
