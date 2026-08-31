@@ -3,9 +3,9 @@
 > Unreal Engine 5.5 팀 프로젝트에서 **Enemy AI·Combat**과 **UI 시스템**을 담당했습니다.
 
 AI의 상태 판단부터 Gameplay Ability 실행, 전투 판정과 피드백까지 연결하고,
-GameplayTag 기반 UI 관리와 MVVM 구조를 통해 게임플레이 데이터와 화면 로직을 분리했습니다.
+GameplayTag 기반 UI 관리와 MVVM 구조로 게임플레이 데이터와 화면 로직을 분리했습니다.
 
-<!-- MEDIA_TODO: 01-hero.gif | 전투, 패링, 맵, 인벤토리 UI를 15~20초 안에 보여주는 대표 GIF -->
+<!-- MEDIA_TODO: 01-hero.gif | 전투, 패링, 맵, 인벤토리를 15~20초 안에 보여주는 대표 GIF -->
 
 ## 프로젝트 목차
 
@@ -29,239 +29,182 @@ GameplayTag 기반 UI 관리와 MVVM 구조를 통해 게임플레이 데이터�
 
 | 영역 | 주요 구현 |
 |---|---|
-| Enemy AI & Combat | AI Perception과 StateTree를 연결하고, 재사용 가능한 Task·Condition·Evaluator를 통해 GAS 공격과 상태 처리를 구성 |
-| UI Architecture | GameplayTag와 DataAsset 기반 위젯 생성, 레이어·포커스·닫기 순서·캐시 정책을 관리하는 UIManagerSubsystem 구현 |
-| Gameplay UI | 월드 위치 기반 Indicator와 메시지 기반 Notification을 프로젝트 구조에 맞게 이식하고 게임플레이 시스템과 UI의 직접 의존성 분리 |
+| Enemy AI & Combat | AI Perception·StateTree·GAS를 연결한 적 행동 및 전투 구조 |
+| UI Architecture | GameplayTag 기반 위젯 생명주기와 레이어·포커스·닫기 순서를 관리하는 UIManager |
+| Gameplay UI | 월드 위치 기반 Indicator와 메시지 기반 Notification을 프로젝트 구조에 맞게 이식·연동 |
 
 ## 1. Enemy AI & Combat
 
 ### StateTree 기반 적 행동 구조
 
-AI Controller는 감지 정보와 전투 대상을 관리하고, StateTree는 순찰·추적·공격과 상태 전환을 담당하도록 책임을 분리했습니다.
-적 캐릭터가 보유한 StateTree 에셋을 빙의 시점에 적용하여 적 타입별 행동을 데이터로 구성하면서도 공통 실행 코드를 재사용할 수 있게 했습니다.
+AI Controller는 감지 정보와 전투 대상을 관리하고, StateTree는 순찰·추적·공격과 상태 전환을 담당하도록 책임을 나눴습니다.
+빙의한 적 캐릭터의 StateTree 에셋을 런타임에 적용하고, 공통 행동은 재사용 가능한 노드로 분리했습니다.
 
-- AI Perception 감지 결과로 시야 여부, 마지막 확인 위치, 전투 대상을 갱신
-- 최초 교전 시 GameplayTag 기반 StateTree Event 전송
-- 공격 Ability의 활성 상태를 추적하여 StateTree Task의 완료 시점 결정
-- 사거리, Ability 쿨다운, GameplayTag 상태를 재사용 가능한 Condition과 Evaluator로 분리
-- State 진입과 이탈에 맞춰 GameplayEffect를 적용·제거하도록 Effect Handle 관리
+- AI Perception 결과로 시야 여부, 마지막 확인 위치, 전투 대상을 갱신하고 교전 Event 전송
+- 공격 Ability의 활성 상태, 사거리, 쿨다운, GameplayTag를 Task·Condition·Evaluator에서 판단
+- State 진입·이탈과 GameplayEffect의 적용·제거 시점을 연결
 - 플레이어와 멀어진 AI의 StateTree와 Tick을 일시 정지하는 거리 기반 LOD 구성
 
-<!-- MEDIA_TODO: 02-statetree.png | 순찰 → 교전 → 추적 → 공격 → 상태이상 흐름이 보이는 StateTree 캡처 -->
+<img width="1307" height="625" alt="Image" src="https://github.com/user-attachments/assets/8f5dc1d0-f1f3-43b6-8090-9b5f69076692" />
 
-<img width="560" alt="AI Perception 기반 플레이어 탐지 및 공격" src="https://github.com/user-attachments/assets/79e459f9-ee5c-4aa3-887d-6b680e37545a" />
+<img width="1307" height="625" alt="Image" src="https://github.com/user-attachments/assets/55f479d1-b177-49f3-989e-727e46f164a4" />
 
 관련 코드:
-
-- [ECEnemyAIController.cpp](./EmptyCity/Character/Enemy/AI/ECEnemyAIController.cpp)
-- [STTask_ActivateAbility.cpp](./EmptyCity/Character/Enemy/AI/Statetree/STTask/STTask_ActivateAbility.cpp)
-- [STTask_ApplyGEWhileActive.cpp](./EmptyCity/Character/Enemy/AI/Statetree/STTask/STTask_ApplyGEWhileActive.cpp)
-- [STEvaluator_TagStatus.cpp](./EmptyCity/Character/Enemy/AI/Statetree/STEvaluator/STEvaluator_TagStatus.cpp)
-- [STCondition_CheckCooldown.cpp](./EmptyCity/Character/Enemy/AI/Statetree/STCondition/STCondition_CheckCooldown.cpp)
+[ECEnemyAIController.cpp](./EmptyCity/Character/Enemy/AI/ECEnemyAIController.cpp) ·
+[STTask_ActivateAbility.cpp](./EmptyCity/Character/Enemy/AI/Statetree/STTask/STTask_ActivateAbility.cpp) ·
+[STTask_ApplyGEWhileActive.cpp](./EmptyCity/Character/Enemy/AI/Statetree/STTask/STTask_ApplyGEWhileActive.cpp)
 
 ### GAS 기반 근접 전투 파이프라인
 
-공격의 실행, 판정, 데미지 계산, 피격 반응을 하나의 클래스에 모으지 않고 Ability, Trace Component, GameplayEffect, GameplayCue로 분리했습니다.
+공격 실행, 판정, 데미지 계산, 피격 반응을 Ability, Trace Component, GameplayEffect, GameplayCue로 분리했습니다.
 
 ```text
-StateTree
-→ Attack Ability 활성화
-→ Montage NotifyState에서 Trace 구간 제어
-→ HitResult를 GameplayEvent로 전달
-→ 패링 가능 여부와 방향 판정
-→ Damage GameplayEffect 적용
-→ ExecCalc에서 가드/체력 피해 계산
-→ GameplayCue에서 Hit Stop, VFX, SFX 실행
+StateTree → Attack Ability → Montage Trace Window → HitResult
+          → Parry 또는 Damage GE → ExecCalc → GameplayCue
 ```
 
 - 공격 구간에만 Trace를 활성화하고 한 공격에서 같은 대상을 중복 처리하지 않도록 관리
-- 패링 가능 태그와 공격 방향의 내적을 이용해 전방 패링 여부 판정
-- 공격별 설정에 따라 피격자에게 넉백 GameplayEvent 전달
-- `SetByCaller`로 무기 공격력과 공격 배율을 전달하고 ExecCalc에서 최종 피해 계산
-- 공격자·무기·공격 타입 GameplayTag 조합으로 Hit Stop, VFX, SFX 데이터 선택
-
-<!-- MEDIA_TODO: 03-melee-trace.gif | 빠른 공격에서도 프레임 사이 궤적을 검사하는 Debug Sweep -->
-<!-- MEDIA_TODO: 04-combat-feedback.gif | 패링, 넉백, Hit Stop과 VFX가 함께 보이는 전투 GIF -->
+- 패링 태그와 공격 방향의 내적으로 전방 패링 여부 판정
+- `SetByCaller`로 무기 공격력과 배율을 전달하고, ExecCalc에서 가드·체력 피해를 분기
+- 공격자·무기·공격 타입 태그에 따라 Hit Stop, VFX, SFX 데이터 선택
 
 관련 코드:
-
-- [ECEnemyDamageAbility_Melee.cpp](./EmptyCity/AbilitySystem/Ability/Enemy/ECEnemyDamageAbility_Melee.cpp)
-- [EnemyMeleeTraceComponent.cpp](./EmptyCity/Character/Enemy/Component/EnemyMeleeTraceComponent.cpp)
-- [WeaponTraceComponent.cpp](./EmptyCity/Equipment/Weapon/WeaponTraceComponent.cpp)
-- [ECExecCalc_Damage.cpp](./EmptyCity/AbilitySystem/ExecCalc/ECExecCalc_Damage.cpp)
-- [ECGameplayCue_CombatImpact.cpp](./EmptyCity/AbilitySystem/GameplayCue/ECGameplayCue_CombatImpact.cpp)
+[ECEnemyDamageAbility_Melee.cpp](./EmptyCity/AbilitySystem/Ability/Enemy/ECEnemyDamageAbility_Melee.cpp) ·
+[EnemyMeleeTraceComponent.cpp](./EmptyCity/Character/Enemy/Component/EnemyMeleeTraceComponent.cpp) ·
+[ECExecCalc_Damage.cpp](./EmptyCity/AbilitySystem/ExecCalc/ECExecCalc_Damage.cpp)
 
 ### Troubleshooting: 패링 반응과 행동 완료 시점 동기화
 
 #### 문제
 
-StateTree의 공격 Task는 공격 Ability가 활성 상태인 동안 `Running`을 유지하고, Ability가 종료되면 다음 행동으로 전환합니다.
-패링 반응 몽타주가 공격 몽타주를 중단할 때 공격 Ability까지 즉시 종료하면, 패링 반응이 끝나기 전에 StateTree가 이동 상태로 전환하여 이동과 애니메이션이 겹쳤습니다.
+StateTree의 공격 Task는 공격 Ability가 활성 상태인 동안 `Running`을 유지합니다.
+패링 직후 공격 Ability까지 종료하면, 패링 반응 몽타주가 재생 중인데도 StateTree가 다음 이동 상태로 전환하여 이동과 애니메이션이 겹쳤습니다.
+반대로 공격 Ability를 유지하기만 하면 Trace와 Weapon Trail이 남을 수 있었습니다.
 
-반대로 공격 Ability를 그대로 유지하기만 하면 공격 Trace와 Weapon Trail이 남을 수 있었습니다.
+<img width="1307" height="625" alt="Image" src="https://github.com/user-attachments/assets/387ef46f-e58b-4c75-a5b7-e11d739981c0" />
 
 #### 해결
 
 공격 판정·연출의 정리 시점과 StateTree가 판단하는 논리적 공격 종료 시점을 분리했습니다.
 
 1. 패링으로 공격 몽타주가 취소되면 Trace와 Trail은 즉시 종료합니다.
-2. 공격 Ability는 바로 종료하지 않아 StateTree의 공격 Task를 `Running` 상태로 유지합니다.
-3. 패링 반응 Ability가 몽타주 완료와 취소를 관리합니다.
-4. 패링 반응이 종료된 시점에 실행 중인 공격 Ability를 정리하여 StateTree가 다음 행동으로 전환하게 합니다.
+2. 공격 Ability는 유지하여 StateTree의 공격 Task를 `Running` 상태로 둡니다.
+3. 패링 반응 Ability가 몽타주 완료·취소를 관리하고, 반응 종료 시 공격 Ability를 정리합니다.
 
 #### 결과
 
-패링 반응 중 이동 상태로 전환되는 현상과 공격 판정·Trail이 남는 현상을 함께 방지했습니다.
-이를 통해 서로 다른 상태 시스템을 연결할 때는 각 시스템의 완료 기준과 종료 책임을 일치시켜야 한다는 점을 확인했습니다.
+패링 반응 중 이동하는 현상과 공격 판정·Trail이 남는 현상을 함께 방지하고,
+반응이 끝난 뒤에만 StateTree가 다음 행동으로 전환하도록 동기화했습니다.
 
-<!-- MEDIA_TODO: 05-parry-lifecycle.gif | 공격 → 패링 → 반응 재생 → 반응 종료 후 행동 재개 흐름 -->
 
 관련 코드:
+[ECEnemyDamageAbility_Melee.cpp](./EmptyCity/AbilitySystem/Ability/Enemy/ECEnemyDamageAbility_Melee.cpp) ·
+[ECGameplayAbility_Parried.cpp](./EmptyCity/AbilitySystem/Ability/Enemy/ECGameplayAbility_Parried.cpp) ·
+[STTask_ActivateAbility.cpp](./EmptyCity/Character/Enemy/AI/Statetree/STTask/STTask_ActivateAbility.cpp)
 
-- [ECEnemyDamageAbility_Melee.cpp](./EmptyCity/AbilitySystem/Ability/Enemy/ECEnemyDamageAbility_Melee.cpp)
-- [ECGameplayAbility_Parried.cpp](./EmptyCity/AbilitySystem/Ability/Enemy/ECGameplayAbility_Parried.cpp)
-- [STTask_ActivateAbility.cpp](./EmptyCity/Character/Enemy/AI/Statetree/STTask/STTask_ActivateAbility.cpp)
-
-### 추가 피격에 따른 Stun 시간 연장
-
-Stun Ability가 활성화되면 GameplayTag로 상태를 표현하고, Stun 중 추가 피격 이벤트를 받으면 타이머의 남은 시간에 연장 시간을 더하도록 구성했습니다.
-
-- [ECGameplayAbility_Stun.cpp](./EmptyCity/AbilitySystem/Ability/Enemy/ECGameplayAbility_Stun.cpp)
+> **추가 구현:** Stun 상태에서 피격 Event를 받으면 남은 시간에 연장 시간을 더하도록 구성했습니다.
+> [ECGameplayAbility_Stun.cpp](./EmptyCity/AbilitySystem/Ability/Enemy/ECGameplayAbility_Stun.cpp)
 
 ## 2. UI Architecture
 
-### GameplayTag 기반 UIManager
+### GameplayTag 기반 UIManager와 닫기 순서
 
-PlayerController가 특정 위젯 클래스를 직접 생성하지 않고 GameplayTag로 UI 열기·닫기를 요청하도록 구성했습니다.
-UIManagerSubsystem은 DataAsset의 설정을 바탕으로 위젯의 생성, 레이어 배치, 캐싱, 포커스와 입력 모드를 관리합니다.
+PlayerController는 위젯 클래스를 직접 생성하지 않고 GameplayTag로 UI 열기·닫기를 요청합니다.
+UIManagerSubsystem은 DataAsset 설정을 바탕으로 생성, 레이어 배치, 캐싱, 포커스와 입력 모드를 공통 경로에서 처리합니다.
 
-- GameplayTag를 위젯 요청의 공통 식별자로 사용
-- HUD, 일반 Window, System UI를 MainLayout의 레이어로 분리
+- HUD·일반 Window·System UI를 MainLayout의 레이어로 분리
+- 활성 위젯 스택에 따라 Z-Order, 포커스, 마우스 커서와 입력 모드 갱신
 - 위젯별 캐시 정책에 따라 닫을 때 숨기거나 제거
-- 활성 위젯 스택을 기준으로 Z-Order, 포커스, 마우스 커서와 입력 모드 갱신
-- Fade가 필요한 UI는 전환 연출이 끝난 후 동일한 Toggle 경로 실행
+- 최상위 창은 전역 스택, 상세 팝업은 부모의 자식 스택으로 관리하여 최근 팝업부터 닫기
+- Fade가 필요한 UI도 연출 완료 후 동일한 Toggle 경로 실행
+
+<img width="1307" height="625" alt="Image" src="https://github.com/user-attachments/assets/12fc3517-bed0-48ff-b06b-7aebfbe0f9b3" />
 
 관련 코드:
-
-- [UIManagerSubsystem.cpp](./EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp)
-- [UIConfigDataAsset.h](./EmptyCity/Data/UI/UIConfigDataAsset.h)
-- [ECMainLayoutWidget.cpp](./EmptyCity/UI/Widget/ECMainLayoutWidget.cpp)
-
-### Root/Child 위젯의 닫기 순서
-
-최상위 창은 UIManager의 전역 스택에서 관리하고, 상세정보와 같은 팝업은 부모 위젯의 자식 스택에서 관리합니다.
-ESC 입력이 들어오면 가장 최근에 활성화된 자식부터 처리하고, 더 이상 자식이 없을 때 부모 창을 닫도록 구성했습니다.
-
-<!-- MEDIA_TODO: 06-ui-close-stack.gif | 상세 팝업 → 부모 창 순서로 닫히는 ESC 처리 -->
-
-관련 코드:
-
-- [ECUserWidget.cpp](./EmptyCity/UI/Widget/ECUserWidget.cpp)
-- [UIManagerSubsystem.cpp](./EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp)
+[UIManagerSubsystem.cpp](./EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp) ·
+[ECUserWidget.cpp](./EmptyCity/UI/Widget/ECUserWidget.cpp) ·
+[UIConfigDataAsset.h](./EmptyCity/Data/UI/UIConfigDataAsset.h)
 
 ### ContextActor 기반 ViewModel 생성과 주입
 
-위젯이 Subsystem이나 Actor를 직접 탐색하며 데이터를 가져오지 않도록 ViewModel 생성 경로를 공통화했습니다.
+위젯이 Subsystem이나 Actor를 직접 탐색하지 않도록 ViewModel 생성 경로를 공통화했습니다.
 
 ```text
-UIManager가 위젯 생성
-→ UI 설정에 등록된 ViewModel 생성
-→ ContextActor를 기반으로 데이터 소스와 Delegate 연결
-→ 위젯의 MVVM View에 ViewModel 주입
-→ 초기값 Broadcast
+UIManager → Widget 생성 → ContextActor 기반 ViewModel 생성·주입 → 초기값 Broadcast
 ```
 
 - ViewModel의 Outer를 소유 위젯으로 지정하여 생명주기를 위젯에 귀속
-- `ContextActor`를 통해 보관함, 침대 등 상호작용 대상에 맞는 데이터 연결
-- 지속적으로 표시할 상태는 ViewModel FieldNotify로 노출
-- Inventory 변경 Delegate를 ViewModel이 수신하고 UI 갱신 이벤트로 변환
-- Widget 소멸 시 Delegate를 해제하여 남은 참조 방지
+- 보관함, 침대 등 상호작용 대상을 `ContextActor`로 전달
+- Inventory 변경 Delegate를 ViewModel이 UI 갱신 Event로 변환하고 소멸 시 연결 해제
 
 관련 코드:
-
-- [ECViewModelFactoryLibrary.cpp](./EmptyCity/UI/ViewModel/ECViewModelFactoryLibrary.cpp)
-- [ECViewModelBase.h](./EmptyCity/UI/ViewModel/ECViewModelBase.h)
-- [InventoryViewModel.cpp](./EmptyCity/UI/ViewModel/InventoryViewModel.cpp)
-- [InventoryInteractionViewModel.cpp](./EmptyCity/UI/ViewModel/InventoryInteractionViewModel.cpp)
-- [TimeViewModel.cpp](./EmptyCity/UI/ViewModel/TimeViewModel.cpp)
+[ECViewModelFactoryLibrary.cpp](./EmptyCity/UI/ViewModel/ECViewModelFactoryLibrary.cpp) ·
+[InventoryInteractionViewModel.cpp](./EmptyCity/UI/ViewModel/InventoryInteractionViewModel.cpp) ·
+[TimeViewModel.cpp](./EmptyCity/UI/ViewModel/TimeViewModel.cpp)
 
 ## 3. Event-driven Gameplay UI
 
 ### Object Indicator
 
-플레이어 입력으로 열고 닫는 일반 UI와 달리, 상호작용 대상의 월드 위치를 기준으로 표시되는 UI가 필요했습니다.
-Lyra의 Indicator System을 분석하여 프로젝트에 필요한 구조를 이식하고, 표시 대상과 위젯 정보를 Descriptor로 전달하도록 구성했습니다.
+월드 위치를 기준으로 상호작용 UI를 표시하기 위해 Lyra의 Indicator System을 프로젝트 범위에 맞게 이식했습니다.
+상호작용 Ability는 Descriptor에 대상과 위젯 정보만 전달하고, IndicatorManagerComponent가 생성과 제거를 담당합니다.
 
-IndicatorManagerComponent가 Indicator의 생성과 제거를 담당하기 때문에 상호작용 Ability는 실제 위젯 클래스를 직접 참조하지 않습니다.
-
-<img width="760" alt="월드 위치 기반 상호작용 Indicator" src="https://github.com/user-attachments/assets/5b4c3ce1-cd44-4c04-980c-fefac81f482c" />
+<img width="720" alt="월드 위치 기반 상호작용 Indicator" src="https://github.com/user-attachments/assets/5b4c3ce1-cd44-4c04-980c-fefac81f482c" />
 
 관련 코드:
-
-- [ECGameplayAbility_Interact.cpp](./EmptyCity/AbilitySystem/Ability/ECGameplayAbility_Interact.cpp)
-- [ECIndicatorManagerComponent.cpp](./EmptyCity/UI/IndicatorSystem/ECIndicatorManagerComponent.cpp)
-- [IndicatorDescriptor.cpp](./EmptyCity/UI/IndicatorSystem/IndicatorDescriptor.cpp)
+[ECGameplayAbility_Interact.cpp](./EmptyCity/AbilitySystem/Ability/Player/ECGameplayAbility_Interact.cpp) ·
+[ECIndicatorManagerComponent.cpp](./EmptyCity/UI/IndicatorSystem/ECIndicatorManagerComponent.cpp)
 
 ### Gameplay Message 기반 Notification
 
-아이템 획득, 지역 이동, 시간대 변경처럼 서로 다른 시스템에서 발생하는 이벤트를 같은 방식으로 UI에 표시하기 위해 메시지 기반 알림 구조를 구성했습니다.
+아이템 획득, 지역 이동, 시간대 변경 Event를 같은 방식으로 표시하기 위해 Lyra의 Gameplay Message 구조를 필요한 범위로 단순화했습니다.
+송신자는 GameplayTag 채널과 Payload만 전달하고, Notification Host Widget이 알림 위젯 생성을 담당합니다.
 
-Lyra의 Gameplay Message 구조를 프로젝트 범위에 맞게 단순화하여, 송신자는 GameplayTag 채널과 메시지 데이터만 전달하고 Notification Host Widget이 실제 알림 위젯을 생성하도록 분리했습니다.
-
-```text
-Gameplay System
-→ GameplayTag Channel + Message Payload
-→ GameplayMessageSubsystem
-→ Notification Host Widget
-→ Notification Widget 생성
-```
-
-<img width="700" alt="지역 이동 알림" src="https://github.com/user-attachments/assets/f2b28efc-b6b8-4814-b22c-d8e6cbb15593" />
-
-<img width="700" alt="아이템 획득 알림" src="https://github.com/user-attachments/assets/a4f9f1f0-7489-4611-9a4c-2f0501efcf5e" />
+<p>
+  <img width="48%" alt="지역 이동 알림" src="https://github.com/user-attachments/assets/f2b28efc-b6b8-4814-b22c-d8e6cbb15593" />
+  <img width="48%" alt="아이템 획득 알림" src="https://github.com/user-attachments/assets/a4f9f1f0-7489-4611-9a4c-2f0501efcf5e" />
+</p>
 
 관련 코드:
-
-- [ECGameplayMessageSubsystem.cpp](./EmptyCity/Subsystem/ECGameplayMessageSubsystem.cpp)
-- [ECNotificationHostWidget.cpp](./EmptyCity/UI/Widget/Notification/ECNotificationHostWidget.cpp)
-- [ECMessageTypes.h](./EmptyCity/Subsystem/ECMessageTypes.h)
+[ECGameplayMessageSubsystem.cpp](./EmptyCity/Subsystem/ECGameplayMessageSubsystem.cpp) ·
+[ECNotificationHostWidget.cpp](./EmptyCity/UI/Widget/Notification/ECNotificationHostWidget.cpp)
 
 ### Progression과 해금 상태
 
-콘텐츠의 상태를 잠김, 해금, 새로 해금됐지만 아직 연출을 확인하지 않은 상태로 구분했습니다.
-이를 통해 해금 여부와 최초 확인 연출 여부를 별도로 관리할 수 있게 했습니다.
+콘텐츠를 잠김, 해금, 새로 해금됐지만 아직 연출을 확인하지 않은 상태로 구분하여 해금 여부와 최초 확인 연출을 별도로 관리했습니다.
 
-<img width="560" alt="콘텐츠 해금 연출" src="https://github.com/user-attachments/assets/25c1533c-32a4-416d-9bdc-eedd6717f3bf" />
+<img width="520" alt="콘텐츠 해금 연출" src="https://github.com/user-attachments/assets/25c1533c-32a4-416d-9bdc-eedd6717f3bf" />
 
-- [ECProgressionSubsystem.cpp](./EmptyCity/Subsystem/ECProgressionSubsystem.cpp)
+관련 코드:
+[ECProgressionSubsystem.cpp](./EmptyCity/Subsystem/ECProgressionSubsystem.cpp)
 
 ## Additional Implementations
 
 ### Inventory UI와 보관함 상호작용
 
-Lyra 기반 Item Definition·Instance·Fragment 구조의 UI 정보를 슬롯과 상세정보 위젯에 표시했습니다.
-또한 플레이어 인벤토리와 보관함 사이의 개별 이동, 전체 이동, 버리기 동작을 ViewModel을 통해 호출하고 변경 이벤트에 따라 양쪽 UI를 갱신하도록 구성했습니다.
+Lyra 기반 Item Definition·Instance·Fragment의 UI 정보를 슬롯과 상세정보 위젯에 표시했습니다.
+플레이어와 보관함 사이의 개별 이동, 전체 이동, 버리기를 ViewModel로 호출하고 변경 Event에 따라 양쪽 UI를 갱신합니다.
 
-<img width="560" alt="인벤토리 UI" src="https://github.com/user-attachments/assets/e98e1876-4cc9-4d58-b767-a55e4d42fadf" />
+<img width="1314" height="629" alt="Image" src="https://github.com/user-attachments/assets/5535fff6-1924-461c-b218-5153dac5288b" />
 
-관련 코드:
+<img width="1308" height="629" alt="Image" src="https://github.com/user-attachments/assets/a27c52c3-cb9f-45b6-a583-9eb397255b82" />
 
-- [ECInventoryManagerComponent.cpp](./EmptyCity/Inventory/ECInventoryManagerComponent.cpp)
-- [ECPlayerInventoryWidget.cpp](./EmptyCity/UI/Widget/Inventory/Player/ECPlayerInventoryWidget.cpp)
-- [ECInventorySlotWidget.cpp](./EmptyCity/UI/Widget/Inventory/ECInventorySlotWidget.cpp)
-- [InventoryInteractionViewModel.cpp](./EmptyCity/UI/ViewModel/InventoryInteractionViewModel.cpp)
-
-### 마우스 위치 기준 Map 확대·축소
-
-마우스 위치를 기준으로 확대·축소되도록 Scale 변화 비율에 따라 Translation을 보정했습니다.
-또한 맵 위젯이 포커스를 가진 상태에서 방향키 입력을 받으면 미리 정의된 연결 관계에 따라 다음 지역 노드로 포커스를 이동합니다.
-
-<img width="560" alt="마우스 위치 기준 맵 확대 축소" src="https://github.com/user-attachments/assets/5d42c727-6894-4337-9cc1-31a6f9b6d998" />
-
-<img width="560" alt="키보드 입력 기반 맵 노드 포커스 이동" src="https://github.com/user-attachments/assets/22bbe2c5-f105-435b-a9b1-524ef55a0788" />
+<img width="1310" height="629" alt="Image" src="https://github.com/user-attachments/assets/d8852574-8fc9-41fa-a7bd-bb53411c21d1" />
 
 관련 코드:
+[ECInventoryManagerComponent.cpp](./EmptyCity/Inventory/ECInventoryManagerComponent.cpp) ·
+[ECPlayerInventoryWidget.cpp](./EmptyCity/UI/Widget/Inventory/Player/ECPlayerInventoryWidget.cpp) ·
+[InventoryInteractionViewModel.cpp](./EmptyCity/UI/ViewModel/InventoryInteractionViewModel.cpp)
 
-- [ECPannableMapWidget.cpp](./EmptyCity/UI/Widget/Map/ECPannableMapWidget.cpp)
-- [ECMapWidget.cpp](./EmptyCity/UI/Widget/Map/ECMapWidget.cpp)
-- [ECMapNodeWidget.cpp](./EmptyCity/UI/Widget/Map/ECMapNodeWidget.cpp)
+### 맵 노드 선택 기반 확대·포커싱
+
+맵 노드를 선택하면 중심 좌표를 계산하고, 해당 위치가 고정 화면 중앙에 오도록 Scale과 Translation 목표값을 산출합니다.
+현재 Transform에서 목표값까지 EaseInOut 보간하며, 빈 영역이 노출되지 않도록 배율과 이동 범위를 제한했습니다.
+배경을 클릭하면 초기 상태로 돌아가고, 선택한 노드의 위치에 따라 정보창을 화면 반대편에 배치합니다.
+
+<img width="1307" height="625" alt="Image" src="https://github.com/user-attachments/assets/f9bdd125-e85f-46a4-8d01-70059e6e1e50" />
+
+관련 코드:
+[ECPannableMapWidget.cpp](./EmptyCity/UI/Widget/Map/ECPannableMapWidget.cpp) ·
+[ECMapNodeWidget.cpp](./EmptyCity/UI/Widget/Map/ECMapNodeWidget.cpp) ·
+[ECMapNodeInfoWidget.cpp](./EmptyCity/UI/Widget/Map/ECMapNodeInfoWidget.cpp)
