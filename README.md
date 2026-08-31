@@ -7,58 +7,31 @@ GameplayTag 기반 UI 관리와 MVVM 구조를 통해 게임플레이 데이터�
 
 <!-- MEDIA_TODO: 01-hero.gif | 전투, 패링, 맵, 인벤토리 UI를 15~20초 안에 보여주는 대표 GIF -->
 
-## Contents
+## 프로젝트 목차
 
-1. [Project Overview](#project-overview)
-2. [Core Contributions](#core-contributions)
-3. [Architecture](#architecture)
-4. [Enemy AI & Combat](#1-enemy-ai--combat)
-5. [UI Architecture](#2-ui-architecture)
-6. [Event-driven Gameplay UI](#3-event-driven-gameplay-ui)
-7. [Additional Implementations](#additional-implementations)
-8. [Repository Scope](#repository-scope)
+1. [프로젝트 개요](#프로젝트-개요)
+2. [프로젝트 역할](#프로젝트-역할)
+3. [Enemy AI & Combat](#1-enemy-ai--combat)
+4. [UI Architecture](#2-ui-architecture)
+5. [Event-driven Gameplay UI](#3-event-driven-gameplay-ui)
+6. [Additional Implementations](#additional-implementations)
 
-## Project Overview
+## 프로젝트 개요
 
 | 항목 | 내용 |
 |---|---|
 | 프로젝트 형태 | Unreal Engine 5.5 기반 팀 프로젝트 |
 | 담당 영역 | Enemy AI·Combat, UI |
 | 언어 | C++, Blueprint |
-| 주요 기술 | Gameplay Ability System, Gameplay Tags, StateTree, AI Perception, UMG, MVVM, Slate, Niagara |
-| 저장소 범위 | 포트폴리오 검토를 위한 C++ 코드 및 구현 설명 |
+| 주요 기술 | Gameplay Ability System, Gameplay Tags, StateTree, AI Perception, UMG, MVVM |
 
-## Core Contributions
+## 프로젝트 역할
 
 | 영역 | 주요 구현 |
 |---|---|
 | Enemy AI & Combat | AI Perception과 StateTree를 연결하고, 재사용 가능한 Task·Condition·Evaluator를 통해 GAS 공격과 상태 처리를 구성 |
 | UI Architecture | GameplayTag와 DataAsset 기반 위젯 생성, 레이어·포커스·닫기 순서·캐시 정책을 관리하는 UIManagerSubsystem 구현 |
 | Gameplay UI | 월드 위치 기반 Indicator와 메시지 기반 Notification을 프로젝트 구조에 맞게 이식하고 게임플레이 시스템과 UI의 직접 의존성 분리 |
-
-## Architecture
-
-```mermaid
-flowchart LR
-    Perception[AI Perception] --> Controller[Enemy AI Controller]
-    Controller -->|StateTree Event| StateTree[StateTree]
-    StateTree --> Node[Task / Condition / Evaluator]
-    Node -->|GameplayTag| Ability[GAS Ability]
-    Ability --> Montage[Montage / Trace Window]
-    Montage --> Damage[GameplayEffect / ExecCalc]
-    Damage --> Feedback[GameplayCue / Hit Reaction]
-```
-
-```mermaid
-flowchart LR
-    Input[GameplayTag UI Request] --> Manager[UIManagerSubsystem]
-    Manager --> Config[UI Config DataAsset]
-    Config --> Widget[Widget Create / Cache / Layer]
-    Manager --> Factory[ViewModel Factory]
-    Context[ContextActor] --> Factory
-    Factory --> VM[ViewModel]
-    VM --> View[UMG / MVVM View]
-```
 
 ## 1. Enemy AI & Combat
 
@@ -292,10 +265,3 @@ Lyra 기반 Item Definition·Instance·Fragment 구조의 UI 정보를 슬롯과
 - [ECPannableMapWidget.cpp](./EmptyCity/UI/Widget/Map/ECPannableMapWidget.cpp)
 - [ECMapWidget.cpp](./EmptyCity/UI/Widget/Map/ECMapWidget.cpp)
 - [ECMapNodeWidget.cpp](./EmptyCity/UI/Widget/Map/ECMapNodeWidget.cpp)
-
-## Repository Scope
-
-- 이 저장소는 실제 팀 프로젝트 전체가 아닌 **포트폴리오 검토용 C++ 코드 스냅샷**입니다.
-- 게임 실행에 필요한 맵, Blueprint, 애니메이션, 사운드 및 Marketplace 에셋은 포함하지 않아 이 저장소만으로는 프로젝트를 실행할 수 없습니다.
-- Lyra 구조를 참고한 Indicator, Gameplay Message, Inventory 영역은 원본 구조를 그대로 본인 설계로 주장하지 않고, 프로젝트 요구에 맞게 분석·이식·연동한 범위를 설명합니다.
-- README의 구현 설명은 담당한 Enemy와 UI 영역을 중심으로 작성했습니다.
