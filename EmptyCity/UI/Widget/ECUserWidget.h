@@ -24,10 +24,12 @@ class EMPTYCITY_API UECUserWidget : public UUserWidget
 	
 public:	
 	/** 위젯이 화면에 나타날 때마다 UI Manager가 호출해 줄 함수 */
-	virtual void OnWidgetOpened();
+	UFUNCTION(BlueprintNativeEvent)
+	void OnWidgetOpened();
 
 	/** 위젯이 화면에서 사라질 때마다 UI Manager가 호출해 줄 함수 */
-	virtual void OnWidgetClosed();
+	UFUNCTION(BlueprintNativeEvent)
+	void OnWidgetClosed();
 
 // ============================================================================
 // MVVM 뷰모델 관리

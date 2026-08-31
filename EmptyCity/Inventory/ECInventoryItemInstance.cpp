@@ -1,12 +1,18 @@
 ﻿#include "ECInventoryItemInstance.h"
 #include "ECInventoryItemDefinition.h"
 
+const UECInventoryItemDefinition* UECInventoryItemInstance::GetItemDefinition() const
+{
+	return GetDefault<UECInventoryItemDefinition>(ItemDef);
+}
+
 const UECInventoryItemFragment* UECInventoryItemInstance::FindFragmentByClass(TSubclassOf<UECInventoryItemFragment> FragmentClass) const
 {
-	if ((ItemDef != nullptr) && (FragmentClass != nullptr))
+	if (FragmentClass != nullptr)
 	{
 		// Instance는 런타임 상태만 보유하고, Fragment 데이터는 공유 에셋인 Definition의 CDO에서 읽는다.
-		return GetDefault<UECInventoryItemDefinition>(ItemDef)->FindFragmentByClass(FragmentClass);
+		const UECInventoryItemDefinition* Definition = GetItemDefinition();
+		return Definition->FindFragmentByClass(FragmentClass);
 	}
 	return nullptr;
 }

@@ -1,5 +1,6 @@
 ﻿#include "ECEquipmentInstance.h"
 #include "ECEquipmentDefinition.h"
+#include "Character/Player/ECPlayer.h"
 #include "GameFramework/Character.h"
 
 APawn* UECEquipmentInstance::GetPawn() const
@@ -27,10 +28,10 @@ void UECEquipmentInstance::SpawnEquipmentActors(const TArray<FEquipmentActorToSp
 	if (APawn* OwningPawn = GetPawn())
 	{
 		USceneComponent* AttachTarget = OwningPawn->GetRootComponent();
-		if (ACharacter* Char = Cast<ACharacter>(OwningPawn))
+		if (AECPlayer* Char = Cast<AECPlayer>(OwningPawn))
 		{
 			// 일반 Pawn은 RootComponent에, Character는 Mesh 소켓에 부착해야 애니메이션이 올바르게 연동된다.
-			AttachTarget = Char->GetMesh();
+			AttachTarget = Char->GetFirstPersonMesh();
 		}
 
 		for (const FEquipmentActorToSpawn& SpawnInfo : ActorsToSpawn)

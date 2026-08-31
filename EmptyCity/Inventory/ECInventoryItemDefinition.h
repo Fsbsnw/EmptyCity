@@ -49,12 +49,8 @@ public:
 // Variables
 // ─────────────────────────────────────────────────────────────
 public:
-	/** UI에 표시할 아이템 이름입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "변수")
-	FText DisplayName;
-
 	/** 이 아이템에 끼워 둔 기능 조각 목록입니다. (장착 가능 여부, 스탯 등 아이템의 능력을 선언) */
-	UPROPERTY(EditDefaultsOnly, Instanced, BlueprintReadOnly, Category = "변수")
+	UPROPERTY(EditDefaultsOnly, Instanced, BlueprintReadOnly, Category = "Item")
 	TArray<TObjectPtr<UECInventoryItemFragment>> Fragments;
-
+	
 };

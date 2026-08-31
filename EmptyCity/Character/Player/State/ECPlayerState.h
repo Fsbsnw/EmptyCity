@@ -17,6 +17,7 @@ enum class EPlayerStatType : uint8
 	Health		UMETA(DisplayName = "체력"),
 	Stamina		UMETA(DisplayName = "스태미나"),
 	MoveSpeed	UMETA(DisplayName = "이동속도"),
+	Combat		UMETA(DisplayName = "공격력"),
 	MAX			UMETA(Hidden)
 };
 

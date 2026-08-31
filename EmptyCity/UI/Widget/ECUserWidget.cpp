@@ -6,11 +6,12 @@
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "UI/Subsystem/UIManagerSubsystem.h"
 
-void UECUserWidget::OnWidgetOpened()
+
+void UECUserWidget::OnWidgetClosed_Implementation()
 {
 }
 
-void UECUserWidget::OnWidgetClosed()
+void UECUserWidget::OnWidgetOpened_Implementation()
 {
 }
 

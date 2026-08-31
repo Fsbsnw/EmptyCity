@@ -21,8 +21,8 @@ void UECRegionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	CurrentRegionTag = ECGameplayTags::MapNode_Location_Home;
-	PreviousRegionTag = ECGameplayTags::MapNode_Location_Home;
+	CurrentRegionTag = ECGameplayTags::MapNode_Location_Shelter;
+	PreviousRegionTag = ECGameplayTags::MapNode_Location_Shelter;
 }
 
 void UECRegionSubsystem::EnterRegion(FGameplayTag NewRegionTag)
@@ -51,7 +51,7 @@ bool UECRegionSubsystem::CanEnterRegion(FGameplayTag NewRegionTag) const
 		return false;
 	}
 	
-	const bool bIsHome = NewRegionTag.MatchesTagExact(ECGameplayTags::MapNode_Location_Home);
+	const bool bIsHome = NewRegionTag.MatchesTagExact(ECGameplayTags::MapNode_Location_Shelter);
 	const bool bIsTradingPost = NewRegionTag.MatchesTagExact(ECGameplayTags::MapNode_Location_TradingPost);
 
 	const UECTimeSubsystem& TimeSubsystem =	UECTimeSubsystem::Get(this);

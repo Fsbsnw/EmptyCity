@@ -16,7 +16,7 @@ class EMPTYCITY_API AECEnemyElite : public AECEnemyCharacterBase
 	GENERATED_BODY()
 public:
 	virtual void BeginPlay() override;	
-	virtual void OnDeathFinished(AActor* OwningActor) override;
+	virtual void OnDeathStarted(AActor* OwningActor) override;
 
 // ─────────────────────────────────────────────────────────────
 // Enemy Normal Management

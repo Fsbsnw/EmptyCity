@@ -25,6 +25,13 @@ class EMPTYCITY_API UECInventoryItemInstance : public UObject
 	GENERATED_BODY()
 
 // ─────────────────────────────────────────────────────────────
+// Definition Query
+// ─────────────────────────────────────────────────────────────
+public:
+	/** 이 인스턴스가 참조하는 아이템 Definition의 CDO를 반환합니다. */
+	const UECInventoryItemDefinition* GetItemDefinition() const;
+
+// ─────────────────────────────────────────────────────────────
 // Fragment Query
 // ─────────────────────────────────────────────────────────────
 public:

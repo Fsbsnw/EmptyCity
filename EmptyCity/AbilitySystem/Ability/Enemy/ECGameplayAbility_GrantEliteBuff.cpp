@@ -12,7 +12,7 @@ UECGameplayAbility_GrantEliteBuff::UECGameplayAbility_GrantEliteBuff()
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 
 	FAbilityTriggerData TriggerData;
-	TriggerData.TriggerTag = ECGameplayTags::Ability_Skill_GrantEliteBuff;
+	TriggerData.TriggerTag = ECGameplayTags::Ability_Type_Skill_Buff_Elite;
 	TriggerData.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
     
 	AbilityTriggers.Add(TriggerData);

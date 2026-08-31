@@ -14,6 +14,8 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Notification_ItemAcquired);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Notification_ItemAcquired_Normal);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Notification_ItemAcquired_Rare);
 
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Notification_ContentUnlocked);
+
 /**
  * 시간 변화, 아이템 획득 알림처럼 일시적으로 표시되는 알림 데이터를 전달합니다.
  */

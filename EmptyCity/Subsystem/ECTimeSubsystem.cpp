@@ -25,7 +25,7 @@ void UECTimeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	LastTimeRelevantRegionTag = ECGameplayTags::MapNode_Location_Home;
+	LastTimeRelevantRegionTag = ECGameplayTags::MapNode_Location_Shelter;
 	
 	UECRegionSubsystem& RegionSubsystem = UECRegionSubsystem::Get(this);
 	RegionSubsystem.OnRegionChanged.AddUObject(this, &ThisClass::HandleRegionChanged);
@@ -68,16 +68,16 @@ void UECTimeSubsystem::HandleRegionChanged(FGameplayTag PreviousRegionTag, FGame
 	const FGameplayTag OriginRegionTag = LastTimeRelevantRegionTag.IsValid() ? LastTimeRelevantRegionTag : PreviousRegionTag;
 
 	// 다른 지역에서 집으로 돌아오면 저녁
-	if (NewRegionTag.MatchesTagExact(ECGameplayTags::MapNode_Location_Home))
+	if (NewRegionTag.MatchesTagExact(ECGameplayTags::MapNode_Location_Shelter))
 	{
 		// 집 -> 교환소 -> 집이 아닌 경우
-		if (!OriginRegionTag.MatchesTagExact(ECGameplayTags::MapNode_Location_Home))
+		if (!OriginRegionTag.MatchesTagExact(ECGameplayTags::MapNode_Location_Shelter))
 		{
 			AdvanceTimeOfDay();
 		}
 	}
 	// 집에서 다른 지역으로 이동
-	else if (OriginRegionTag.MatchesTagExact(ECGameplayTags::MapNode_Location_Home))
+	else if (OriginRegionTag.MatchesTagExact(ECGameplayTags::MapNode_Location_Shelter))
 	{
 		AdvanceTimeOfDay();
 	}
@@ -111,6 +111,8 @@ void UECTimeSubsystem::SetTimeOfDay(EECTimeOfDay NewTimeOfDay, bool bForceNotify
 
 	UECGameplayMessageSubsystem& MessageSubsystem = UECGameplayMessageSubsystem::Get(this);
 	MessageSubsystem.BroadcastMessage(TAG_AddNotification_Message, Message);
+
+	OnGameTimeChanged.Broadcast(ECDay, TimeOfDay);
 }
 
 FGameplayTag UECTimeSubsystem::GetTimeTag(EECTimeOfDay Time) const

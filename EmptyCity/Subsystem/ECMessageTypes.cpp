@@ -9,3 +9,5 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Notification_TimeChanged, "TAG.Notification.TimeChang
 UE_DEFINE_GAMEPLAY_TAG(TAG_Notification_ItemAcquired, "TAG.Notification.ItemAcquired");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Notification_ItemAcquired_Normal, "TAG.Notification.ItemAcquired.Normal");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Notification_ItemAcquired_Rare, "TAG.Notification.ItemAcquired.Rare");
+
+UE_DEFINE_GAMEPLAY_TAG(TAG_Notification_ContentUnlocked, "TAG.Notification.ContentUnlocked");

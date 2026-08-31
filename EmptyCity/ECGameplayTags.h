@@ -4,13 +4,38 @@
 
 namespace ECGameplayTags
 {
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_Jump);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_Sprint);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_Crouch);
-  
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_EnemyMeleeAttack);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_GrantEliteBuff);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_Guard);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_Attack);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_Attack_Light);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_Attack_Heavy);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_Attack_Melee);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Action_HitReaction_Knockback);
 
+	
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Skill_Damage_Slash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Skill_Damage_SlashCombo);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Skill_Damage_Kick);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Skill_Damage_LeapSlam);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Skill_Damage_WhirlSlash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Skill_Damage_LeapingWhirlSlash);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Type_Skill_Buff_Elite);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Ability_Type_Skill_Damage_Slash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Ability_Type_Skill_Damage_SlashCombo);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Ability_Type_Skill_Damage_Kick);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Ability_Type_Skill_Damage_LeapSlam);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Ability_Type_Skill_Damage_WhirlSlash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Ability_Type_Skill_Damage_LeapingWhirlSlash);
+	
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ability_Attack_Light);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ability_Attack_Heavy);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ability_Guard);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ability_Jump);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ability_Interact);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Ability_Sprint);
@@ -51,15 +76,23 @@ namespace ECGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_DamageTaken);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Debuff_Stun);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Item_Use);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Parried);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_ParrySuccess);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Attack_Melee_Hit);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_HitReaction_Knockback);
 	
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_DamageMultiplier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Heal);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Stamina);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_StaminaDamage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_WeaponAttackPower);
 	
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Moving);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Sprinting);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Attacking);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Crouching);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Guarding);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_ParryWindow);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Death);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Death_Dying);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Death_Dead);
@@ -70,16 +103,22 @@ namespace ECGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Debuff);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Debuff_Stun);
 
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_Home);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_Shelter);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_Paradise);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_TradingPost);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_Quarry);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_Mine);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_CultistBase);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_NSeoulTower);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MapNode_Location_SeoulStation);
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Combat);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Combat_HitReact);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Character_Type);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Character_Type_Player);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Character_Type_Enemy);
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_WoodenClub);
@@ -102,4 +141,10 @@ namespace ECGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cutscene_Intro_1);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cutscene_Intro_2);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cutscene_Boss_Spawn);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTree);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTree_Event);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTree_Event_Patrol);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTree_Event_Engage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTree_Event_Combat);
 }

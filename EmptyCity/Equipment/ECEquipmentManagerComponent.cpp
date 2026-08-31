@@ -3,6 +3,7 @@
 #include "ECEquipmentDefinition.h"
 #include "ECEquipmentInstance.h"
 #include "AbilitySystem/ECAbilitySystemComponent.h"
+#include "Equipment/Weapon/ECWeaponInstance.h"
 
 UECEquipmentInstance* FEquipmentList::AddEntry(TSubclassOf<UECEquipmentDefinition> EquipmentDefinition)
 {
@@ -75,27 +76,51 @@ UECEquipmentManagerComponent::UECEquipmentManagerComponent(const FObjectInitiali
 
 UECEquipmentInstance* UECEquipmentManagerComponent::EquipItem(TSubclassOf<UECEquipmentDefinition> EquipmentDefinition)
 {
-	UECEquipmentInstance* Result = nullptr;
-	if (EquipmentDefinition)
+	if (!EquipmentDefinition)
 	{
-		Result = EquipmentList.AddEntry(EquipmentDefinition);
-		if (Result)
-		{
-			// Actor 스폰이 완료된 뒤 장착 이벤트를 발행한다.
-			Result->OnEquipped();
-		}
+		return nullptr;
 	}
+
+	UECEquipmentInstance* Result = EquipmentList.AddEntry(EquipmentDefinition);
+	if (!Result)
+	{
+		return nullptr;
+	}
+
+	if (UECWeaponInstance* NewWeapon = Cast<UECWeaponInstance>(Result))
+	{
+		// 무기는 한 번에 하나만 장착한다. 이전 무기를 먼저 해제해야
+		// 새 무기의 OnEquipped가 적용한 애니메이션 상태가 유지된다.
+		if (UECWeaponInstance* PreviousWeapon = CachedEquippedWeapon.Get();
+			IsValid(PreviousWeapon) && PreviousWeapon != NewWeapon)
+		{
+			UnequipItem(PreviousWeapon);
+		}
+
+		CachedEquippedWeapon = NewWeapon;
+	}
+
+	// Actor 스폰과 이전 무기 해제가 완료된 뒤 장착 이벤트를 발행한다.
+	Result->OnEquipped();
 	return Result;
 }
 
 void UECEquipmentManagerComponent::UnequipItem(UECEquipmentInstance* ItemInstance)
 {
-	if (ItemInstance)
+	if (!IsValid(ItemInstance))
 	{
-		// 해제 이벤트를 먼저 발행한 뒤 Actor를 파괴하고 엔트리를 제거한다.
-		ItemInstance->OnUnequipped();
-		EquipmentList.RemoveEntry(ItemInstance);
+		return;
 	}
+
+	// 해제 이벤트를 먼저 발행한 뒤 Actor를 파괴하고 엔트리를 제거한다.
+	ItemInstance->OnUnequipped();
+
+	if (CachedEquippedWeapon.Get() == ItemInstance)
+	{
+		CachedEquippedWeapon.Reset();
+	}
+
+	EquipmentList.RemoveEntry(ItemInstance);
 }
 
 TArray<UECEquipmentInstance*> UECEquipmentManagerComponent::GetEquipmentInstancesOfType(TSubclassOf<UECEquipmentInstance> InstanceType) const

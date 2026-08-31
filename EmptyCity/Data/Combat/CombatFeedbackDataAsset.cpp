@@ -3,12 +3,17 @@
 
 #include "Data/Combat/CombatFeedbackDataAsset.h"
 
-FCombatFeedbackResult UCombatFeedbackDataAsset::GetFeedbackResult(FGameplayTag InWeaponTag,	FGameplayTag InAttackTag) const
+FCombatFeedbackResult UCombatFeedbackDataAsset::GetFeedbackResult(
+	FGameplayTag InSourceTag,
+	FGameplayTag InWeaponTag,
+	FGameplayTag InAttackTag) const
 {
 	// 정확히 일치하는 행이 있는지 검사
 	for (const FCombatFeedbackRow& Row : CombatFeedbackRows)
 	{
-		if (Row.WeaponTag.MatchesTagExact(InWeaponTag) && Row.AttackTag.MatchesTagExact(InAttackTag))
+		if (Row.SourceTag.MatchesTagExact(InSourceTag) &&
+			Row.WeaponTag.MatchesTagExact(InWeaponTag) &&
+			Row.AttackTag.MatchesTagExact(InAttackTag))
 		{
 			return Row.FeedbackResult;
 		}

@@ -16,6 +16,7 @@ class EMPTYCITY_API UECEnemyAnimInstance : public UAnimInstance
 	GENERATED_BODY()
 public:
 	virtual void NativeInitializeAnimation() override;
+	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 	virtual void NativeUninitializeAnimation() override;
 	
 // ─────────────────────────────────────────────────────────────
@@ -23,10 +24,23 @@ public:
 // ─────────────────────────────────────────────────────────────
 public:
 	/** 스턴 상태를 체크하는 변수입니다. */
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	float MoveSpeed = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	float MoveDirection = 0.0f;
+
 	UPROPERTY(BlueprintReadOnly, Category = "State")
 	bool bIsStunned = false;
+
+	/** 스턴 상태를 체크하는 변수입니다. */
+	UPROPERTY(BlueprintReadOnly, Category = "State")
+	bool bIsDead = false;
 
 protected:
 	/** 스턴 상태가 변화할 때 실행되는 함수입니다. */
 	void OnStunTagChanged(const FGameplayTag Tag, int32 NewCount);
+
+	/** 사망 상태가 변화할 때 실행되는 함수입니다. */
+	void OnDeathTagChanged(const FGameplayTag Tag, int32 NewCount);	
 };

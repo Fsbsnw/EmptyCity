@@ -3,21 +3,28 @@
 
 #include "Character/Enemy/AI/ECEnemyAIController.h"
 
-#include "BehaviorTree/BehaviorTree.h"
-#include "BehaviorTree/BehaviorTreeComponent.h"
-#include "BehaviorTree/BlackboardComponent.h"
+#include "ECGameplayTags.h"
 #include "Character/Enemy/ECEnemyCharacterBase.h"
 #include "Character/Player/ECPlayer.h"
 #include "Kismet/GameplayStatics.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
+#include "StateTree.h"
+
+void UECEnemyStateTreeAIComponent::SetStateTreeAsset(UStateTree* NewStateTree)
+{
+	if (IsRunning())
+	{
+		StopLogic(TEXT("Changing enemy StateTree asset"));
+	}
+
+	StateTreeRef.SetStateTree(NewStateTree);
+}
 
 AECEnemyAIController::AECEnemyAIController()
 {
-	Blackboard = CreateDefaultSubobject<UBlackboardComponent>("BlackboardComponent");
-	check(Blackboard);
-	BehaviorTreeComponent = CreateDefaultSubobject<UBehaviorTreeComponent>("BehaviorTreeComponent");
-	check(BehaviorTreeComponent);
+	// Enemy Team
+	SetGenericTeamId(FGenericTeamId(1));
 
 	// AI Perception
 	{
@@ -31,23 +38,64 @@ AECEnemyAIController::AECEnemyAIController()
 
 		AIPerceptionComponent->ConfigureSense(*SightConfig);
 	}
-	
-	BrainComponent = BehaviorTreeComponent;
+
+	StateTreeComponent = CreateDefaultSubobject<UECEnemyStateTreeAIComponent>(TEXT("StateTreeComponent"));
+	StateTreeComponent->SetStartLogicAutomatically(false);
+
+	BrainComponent = StateTreeComponent;
 }
 
 void AECEnemyAIController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
 
-	// Behavior Tree를 활성화시킵니다.
-	if (AECEnemyCharacterBase* EnemyCharacter = Cast<AECEnemyCharacterBase>(InPawn))
+	if (!IsValid(StateTreeComponent))
 	{
-		if (UBehaviorTree* BTAsset = EnemyCharacter->GetBehaviorTree())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("BT : %s"),*BTAsset->GetName());
-			RunBehaviorTree(BTAsset);
-		}
+		return;
 	}
+
+	// Blueprint에 저장되어 있던 Controller 소유 StateTree 설정은 사용하지 않습니다.
+	// 빙의한 Enemy Character 클래스의 StateTreeAsset만 런타임에 적용합니다.
+	StateTreeComponent->SetStartLogicAutomatically(false);
+	StateTreeComponent->SetStateTreeAsset(nullptr);
+
+	const AECEnemyCharacterBase* EnemyCharacter = Cast<AECEnemyCharacterBase>(InPawn);
+	if (!IsValid(EnemyCharacter))
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("%s: AECEnemyCharacterBase가 아닌 Pawn을 빙의하여 StateTree를 시작할 수 없습니다."),
+			*GetNameSafe(this));
+		return;
+	}
+
+	UStateTree* StateTreeAsset = EnemyCharacter->GetStateTreeAsset();
+	if (!IsValid(StateTreeAsset))
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("%s: %s 클래스에 StateTreeAsset이 지정되지 않았습니다."),
+			*GetNameSafe(this),
+			*GetNameSafe(EnemyCharacter->GetClass()));
+		return;
+	}
+
+	StateTreeComponent->SetStateTreeAsset(StateTreeAsset);
+	StateTreeComponent->StartLogic();
+
+	UE_LOG(LogTemp, Log,
+		TEXT("%s: %s에 지정된 StateTree %s를 시작했습니다."),
+		*GetNameSafe(this),
+		*GetNameSafe(EnemyCharacter->GetClass()),
+		*GetNameSafe(StateTreeAsset));
+}
+
+void AECEnemyAIController::OnUnPossess()
+{
+	if (IsValid(StateTreeComponent) && StateTreeComponent->IsRunning())
+	{
+		StateTreeComponent->StopLogic(TEXT("Enemy pawn unpossessed"));
+	}
+
+	Super::OnUnPossess();
 }
 
 void AECEnemyAIController::BeginPlay()
@@ -71,16 +119,37 @@ void AECEnemyAIController::BeginPlay()
 	{
 		AIPerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(this, &ThisClass::OnTargetDetected);
 	}
+}
 
-	// 초기 위치를 저장하고 주변 반경 안에서 이동합니다.
-	if (Blackboard && Blackboard->GetBlackboardAsset())
+void AECEnemyAIController::HandlePawnDeath()
+{
+	bIsPawnDead = true;
+
+	GetWorldTimerManager().ClearTimer(LODTimerHandle);
+
+	if (AIPerceptionComponent)
 	{
-		Blackboard->SetValueAsVector("InitialLocation", GetPawn()->GetActorLocation());
+		AIPerceptionComponent->SetSenseEnabled(UAISense_Sight::StaticClass(),false);
+		AIPerceptionComponent->ForgetAll();
 	}
+
+	if (StateTreeComponent)
+	{
+		StateTreeComponent->StopLogic(TEXT("Enemy died"));
+	}
+
+	StopMovement();
+	ClearFocus(EAIFocusPriority::Gameplay);
+	ClearCombatTarget();
 }
 
 void AECEnemyAIController::UpdateAILOD()
 {
+	if (bIsPawnDead)
+	{
+		return;
+	}
+	
 	APawn* MyPawn = GetPawn();
 	APawn* TargetPlayer = CachedPlayerPawn.Get();
 
@@ -89,16 +158,15 @@ void AECEnemyAIController::UpdateAILOD()
 	// 1. 플레이어와 이 AI 폰 사이의 거리 계산
 	const float DistanceToPlayer = FVector::Distance(MyPawn->GetActorLocation(), TargetPlayer->GetActorLocation());
 
-	// BT를 제어하는 BrainComponent를 가져옵니다.
-	if (!BrainComponent) return;
+	if (!StateTreeComponent) return;
 
 	// 2. 거리에 따른 조건 분기
 	if (DistanceToPlayer > SleepDistanceThreshold)
 	{
-		// 일정 거리보다 멀어지면 비헤이비어 트리를 일시정지(Pause) 시킵니다.
-		if (BrainComponent->IsRunning())
+		// 일정 거리보다 멀어지면 StateTree를 일시정지(Pause) 시킵니다.
+		if (StateTreeComponent->IsRunning())
 		{
-			BrainComponent->PauseLogic(TEXT("플레이어와의 거리가 최적화 범위 밖으로 벗어났습니다 - Sleep"));
+			StateTreeComponent->PauseLogic(TEXT("플레이어와의 거리가 최적화 범위 밖으로 벗어났습니다 - Sleep"));
 			UE_LOG(LogTemp, Warning, TEXT("플레이어와의 거리가 최적화 범위 밖으로 벗어났습니다 - Sleep"));
             
 			// 필요하다면 여기서 액터의 틱이나 애니메이션 틱도 완전히 꺼버릴 수 있습니다.
@@ -112,10 +180,10 @@ void AECEnemyAIController::UpdateAILOD()
 	}
 	else
 	{
-		// 다시 범위 안으로 들어오면 비헤이비어 트리를 재개(Resume)합니다.
-		if (BrainComponent->IsPaused())
+		// 다시 범위 안으로 들어오면 StateTree를 재개(Resume)합니다.
+		if (StateTreeComponent->IsPaused())
 		{
-			BrainComponent->ResumeLogic(TEXT("플레이어와의 거리가 최적화 범위 안으로 들어왔습니다 - Wake Up"));
+			StateTreeComponent->ResumeLogic(TEXT("플레이어와의 거리가 최적화 범위 안으로 들어왔습니다 - Wake Up"));
 			UE_LOG(LogTemp, Warning, TEXT("플레이어와의 거리가 최적화 범위 안으로 들어왔습니다 - Wake Up"));
 			MyPawn->SetActorTickEnabled(true);
 		}
@@ -124,10 +192,9 @@ void AECEnemyAIController::UpdateAILOD()
 
 void AECEnemyAIController::OnTargetDetected(AActor* Actor, FAIStimulus Stimulus)
 {
-	// 임시 구현, 플레이어/반려동물 체크 기능 구현 필요
-	if (!Blackboard || !Blackboard->GetBlackboardAsset()) 
+	if (bIsPawnDead)
 	{
-		return; 
+		return;
 	}
 	
 	// 1. 들어온 액터가 플레이어 캐릭터인지 캐스팅을 통해 확인
@@ -136,15 +203,44 @@ void AECEnemyAIController::OnTargetDetected(AActor* Actor, FAIStimulus Stimulus)
 		// 2. 발견했는지, 놓쳤는지 확인
 		if (Stimulus.WasSuccessfullySensed())
 		{
+			const bool bWasAlreadyInCombat = bIsInCombat;
+			
+			bHasLineOfSight = true;
+			bIsInCombat = true;
+			LastKnownTargetLocation = TargetPlayer->GetActorLocation();
+			
 			// 플레이어를 발견함 (블랙보드 TargetActor에 Player 등록)
-			Blackboard->SetValueAsObject("TargetActor", TargetPlayer);
+			TargetActor = TargetPlayer;
+			
+			if (!bWasAlreadyInCombat && IsValid(StateTreeComponent) && StateTreeComponent->IsRunning())
+			{
+				FStateTreeEvent Event;
+				Event.Tag = ECGameplayTags::StateTree_Event_Engage;
+				StateTreeComponent->SendStateTreeEvent(Event);
+			}
 			UE_LOG(LogTemp, Warning, TEXT("플레이어를 발견했습니다."));
 		}
 		else
 		{
-			// 플레이어를 놓침 (블랙보드 TargetActor 비우기)
-			Blackboard->ClearValue("TargetActor");
+			if (TargetActor != TargetPlayer)
+			{
+				return;
+			}
+			
+			bHasLineOfSight = false;
+			LastKnownTargetLocation = Stimulus.StimulusLocation;
+			
 			UE_LOG(LogTemp, Warning, TEXT("플레이어를 놓쳤습니다."));
 		}
 	}
+}
+
+void AECEnemyAIController::ClearCombatTarget()
+{
+	TargetActor = nullptr;
+	bHasLineOfSight = false;
+	bIsInCombat = false;
+	LastKnownTargetLocation = FAISystem::InvalidLocation;
+
+	UE_LOG(LogTemp, Warning, TEXT("전투 대상을 포기했습니다."));
 }

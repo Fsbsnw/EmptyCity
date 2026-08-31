@@ -3,21 +3,32 @@
 
 #include "Character/Enemy/ECEnemyCharacterBase.h"
 
+#include "AIController.h"
+#include "BrainComponent.h"
 #include "AbilitySystem/ECAbilitySet.h"
+#include "AbilitySystem/Attribute/ECCombatSet.h"
 #include "AbilitySystem/Attribute/ECHealthSet.h"
 #include "AbilitySystem/Attribute/ECMoveSpeedSet.h"
+#include "AI/ECEnemyAIController.h"
+#include "Component/HitReactionComponent.h"
+#include "Component/Attribute/ECHealthComponent.h"
 #include "Components/WidgetComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Item/ECItemDropComponent.h"
 #include "UI/ViewModel/ECViewModelFactoryLibrary.h"
 #include "UI/ViewModel/HealthViewModel.h"
 #include "UI/Widget/ECUserWidget.h"
 
 AECEnemyCharacterBase::AECEnemyCharacterBase(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
+	PrimaryActorTick.bCanEverTick = false;
+	
 	ASC = CreateDefaultSubobject<UECAbilitySystemComponent>(TEXT("ASC"));
 
 	HealthSet = CreateDefaultSubobject<UECHealthSet>(TEXT("HealthSet"));
 	MoveSpeedSet = CreateDefaultSubobject<UECMoveSpeedSet>(TEXT("MoveSpeedSet"));
+	CombatSet = CreateDefaultSubobject<UECCombatSet>(TEXT("CombatSet"));
+	ItemDropComponent = CreateDefaultSubobject<UECItemDropComponent>(TEXT("ItemDropComponent"));
 
 	{
 		HealthBarComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("Health Bar Component"));
@@ -36,10 +47,23 @@ void AECEnemyCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 기본 속성들을 초기화합니다.
 	InitializeDefaultAttributes();
-	// 체력바 컴포넌트를 초기화합니다.
 	InitializeHealthBarComponent();
+	InitializeHitReactionComponent();
+
+	HealthComponent->InitializeWithAbilitySystem(ASC);
+}
+
+void AECEnemyCharacterBase::OnDeathStarted(AActor* OwningActor)
+{
+	ItemDropComponent->SpawnDrop();
+
+	if (AECEnemyAIController* AIController = Cast<AECEnemyAIController>(GetController()))
+	{
+		AIController->HandlePawnDeath();
+	}
+	
+	Super::OnDeathStarted(OwningActor);
 }
 
 void AECEnemyCharacterBase::InitializeDefaultAttributes()
@@ -73,6 +97,18 @@ void AECEnemyCharacterBase::InitializeHealthBarComponent()
 			HealthBarWidget->InjectViewModel(HealthViewModel);
 		}
 	}
+}
+
+void AECEnemyCharacterBase::InitializeHitReactionComponent()
+{
+	UHitReactionComponent* HitReactionComponent = FindComponentByClass<UHitReactionComponent>();
+
+	if (!HitReactionComponent)
+	{
+		return;
+	}
+
+	HitReactionComponent->InitializeWithAbilitySystem(ASC);
 }
 
 void AECEnemyCharacterBase::ApplyAttributeEffectToSelf(const TSubclassOf<UGameplayEffect>& GameplayEffectClass, float Level)

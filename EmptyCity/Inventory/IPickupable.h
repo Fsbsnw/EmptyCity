@@ -106,5 +106,5 @@ public:
 
 	/** Pickup 대상의 내용물을 인벤토리 컴포넌트에 추가합니다. 서버 권한에서만 동작합니다. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, meta = (WorldContext = "Ability"))
-	static void AddPickupToInventory(UECInventoryManagerComponent* InventoryComponent, TScriptInterface<IPickupable> Pickup);
+	static bool AddPickupToInventory(UECInventoryManagerComponent* InventoryComponent, TScriptInterface<IPickupable> Pickup);
 };

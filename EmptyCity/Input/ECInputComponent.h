@@ -23,8 +23,8 @@ public:
 	template <class UserClass, typename FuncType, typename... VarTypes>
 	void BindNativeAction(const UECInputConfig* InputConfig, const FGameplayTag& InputTag, ETriggerEvent TriggerEvent, UserClass* Object, FuncType Func, VarTypes... Vars);
 
-	/** AbilityInputActions 전체를 Triggered/Completed로 일괄 바인딩하고 핸들을 BindHandles에 저장하는 함수입니다.
-	 * BindHandles는 런타임 중 등록한 어빌리티를 제거하기 위한 용도입니다.
+	/** AbilityInputActions 전체를 Started/Completed로 일괄 바인딩합니다.
+	 * Tap/Hold처럼 Triggered 판정 시점이 필요한 액션은 BindNativeAction으로 별도 바인딩합니다.
 	 */
 	template <class UserClass, typename PressedFuncType, typename ReleasedFuncType>
 	void BindAbilityAction(const UECInputConfig* InputConfig, UserClass* Object, PressedFuncType PressedFunc, ReleasedFuncType ReleasedFunc);

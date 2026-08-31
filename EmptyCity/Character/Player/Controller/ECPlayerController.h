@@ -4,6 +4,7 @@
 #include "GameplayTagContainer.h"
 #include "InputMappingContext.h"
 #include "GameFramework/PlayerController.h"
+#include "GenericTeamAgentInterface.h"
 #include "Inventory/IECInventory.h"
 #include "ECPlayerController.generated.h"
 
@@ -15,7 +16,7 @@ class UECInputConfig;
 class UUIConfigDataAsset;
 
 UCLASS()
-class EMPTYCITY_API AECPlayerController : public APlayerController, public IIECInventory
+class EMPTYCITY_API AECPlayerController : public APlayerController, public IIECInventory, public IGenericTeamAgentInterface
 {
 	GENERATED_BODY()
 	
@@ -26,6 +27,18 @@ public:
 	AECPlayerController();
 	virtual void PostProcessInput(const float DeltaTime, const bool bGamePaused) override;
 	virtual void BeginPlay() override;
+
+
+// ─────────────────────────────────────────────────────────────
+// Generic Team
+// ─────────────────────────────────────────────────────────────
+public:
+	virtual void SetGenericTeamId(const FGenericTeamId& NewTeamId) override { TeamId = NewTeamId; }
+	virtual FGenericTeamId GetGenericTeamId() const override { return TeamId; }
+
+private:
+	/** Player Team */
+	FGenericTeamId TeamId = FGenericTeamId(0);
 	
 
 // ─────────────────────────────────────────────────────────────

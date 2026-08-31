@@ -3,117 +3,51 @@
 
 #include "UI/Widget/Map/ECPannableMapWidget.h"
 
+#include "ECMapNodeInfoWidget.h"
 #include "ECMapNodeWidget.h"
-#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
-#include "Components/Image.h"
+#include "Components/CanvasPanelSlot.h"
 
 void UECPannableMapWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
-	
-	// 1. WBP 내부에 배치된 모든 하위 위젯을 순회하며 맵 노드만 찾아 캐싱합니다.
-	if (WidgetTree)
+
+	if (CanvasPanel_MapContent)
 	{
-		WidgetTree->ForEachWidget([this](UWidget* Widget)
-		{
-			// 위젯이 맵 노드 클래스인지 확인
-			if (UECMapNodeWidget* MapNode = Cast<UECMapNodeWidget>(Widget))
-			{
-				// 태그가 유효하다면 TMap에 등록
-				if (MapNode->MyNodeTag.IsValid())
-				{
-					AllMapNodes.Add(MapNode->MyNodeTag, MapNode);
-					
-					// Clicked 이벤트 바인딩
-					MapNode->OnNodeClicked.AddUObject(this, &ThisClass::HandleMapNodeClicked);
-				}
-			}
-		});
+		InitialMapTransform = CanvasPanel_MapContent->GetRenderTransform();
 	}
-}
-
-FReply UECPannableMapWidget::NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
-{
-	const float WheelDelta = InMouseEvent.GetWheelDelta();
-	const float ZoomStep = 0.02f;
-
-	const FVector2D MouseScreenPosition = InMouseEvent.GetScreenSpacePosition();
-	const FGeometry& CanvasGeometry = CanvasPanel_Root->GetCachedGeometry();
-
-	const FVector2D MouseLocalPosition = CanvasGeometry.AbsoluteToLocal(MouseScreenPosition);
-	const FVector2D CanvasCenterPosition = CanvasGeometry.GetLocalSize() * 0.5f;
-
-	FWidgetTransform Transform = Image_Map->GetRenderTransform();
 	
-	const FVector2D ImageCenter = CanvasCenterPosition + Transform.Translation;
-	const FVector2D MouseOffsetFromImageCenter = MouseLocalPosition - ImageCenter;
+	if (!WidgetTree)
+	{
+		return;
+	}
 
-	const float MinScale = CanvasGeometry.GetLocalSize().X / Image_Map->GetDesiredSize().X;
-	const float MaxScale = 3.f;
-	
-	const float OldScale = Transform.Scale.X;
-	const float NewScale = FMath::Clamp(OldScale + WheelDelta * ZoomStep, MinScale, MaxScale);
+	AllMapNodes.Reset();
 
-	const float ScaleRatio = NewScale / OldScale;
+	// WBP에 배치된 맵 노드를 찾아 태그별로 캐싱합니다.
+	WidgetTree->ForEachWidget([this](UWidget* Widget)
+	{
+		UECMapNodeWidget* MapNode = Cast<UECMapNodeWidget>(Widget);
+		if (!MapNode || !MapNode->MyNodeTag.IsValid())
+		{
+			return;
+		}
 
-	Transform.Scale = FVector2D(NewScale, NewScale);
+		AllMapNodes.Add(MapNode->MyNodeTag, MapNode);
 
-	// 확대/축소된 비율만큼 이동 보정
-	Transform.Translation -= MouseOffsetFromImageCenter * (ScaleRatio - 1.f);
-
-	Image_Map->SetRenderTransform(Transform);
-	ClampMapTransform();
-
-	return FReply::Handled();
+		MapNode->OnNodeClicked.RemoveAll(this);
+		MapNode->OnNodeClicked.AddUObject(this, &ThisClass::HandleMapNodeClicked);
+	});
 }
 
 FReply UECPannableMapWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	// 드래그가 켜져 있고, 마우스 왼쪽 버튼을 눌렀다면 드래그 시작!
-	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	ResetMapScale();
+
+	if (MapNodeInfoWidget)
 	{
-		bIsDragging = true;
-		DragStartMousePosition = InMouseEvent.GetScreenSpacePosition();
-		DragStartWidgetTranslation = Image_Map->GetRenderTransform().Translation;
-
-		// 마우스가 위젯을 계속 캡처합니다.
-		return FReply::Handled().CaptureMouse(TakeWidget());
-	}
-
-	return FReply::Handled();
-}
-
-FReply UECPannableMapWidget::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
-{
-	if (bIsDragging)
-	{
-		// 1. 마우스가 얼마나 이동했는지 계산
-		FVector2D MouseDelta = InMouseEvent.GetScreenSpacePosition() - DragStartMousePosition;
-
-		// 2. 현재 화면의 DPI 스케일로 나눠주어야 마우스와 1:1로 딱 붙어서 이동합니다.
-		float DPIScale = UWidgetLayoutLibrary::GetViewportScale(GetWorld());
-		FVector2D NewTranslation = DragStartWidgetTranslation + (MouseDelta / DPIScale);
-
-		// 3. 위젯의 렌더링 위치 업데이트
-		Image_Map->SetRenderTranslation(NewTranslation);
-		ClampMapTransform();
-
-		return FReply::Handled();
-	}
-
-	return FReply::Unhandled();
-}
-
-FReply UECPannableMapWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
-{
-	if (bIsDragging && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
-	{
-		bIsDragging = false;
-        
-		// 마우스 캡처를 풀어줍니다.
-		return FReply::Handled().ReleaseMouseCapture();
+		MapNodeInfoWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
 	return FReply::Handled();
@@ -123,90 +57,130 @@ void UECPannableMapWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	if (!bIsFocusAnimating || !Image_Map)
+	if (!bIsFocusAnimating || !CanvasPanel_MapContent)
 	{
 		return;
 	}
 
 	FocusAnimElapsed += InDeltaTime;
-
-	const float Alpha = FocusAnimDuration <= KINDA_SMALL_NUMBER
-		? 1.f
-		: FMath::Clamp(FocusAnimElapsed / FocusAnimDuration, 0.f, 1.f);
-
+	
+	const float Alpha = FocusAnimDuration <= KINDA_SMALL_NUMBER	? 1.f : FMath::Clamp(FocusAnimElapsed / FocusAnimDuration, 0.f, 1.f);
 	const float EaseAlpha = FMath::InterpEaseInOut(0.f, 1.f, Alpha, 2.f);
 
-	FWidgetTransform NewTransform = FocusStartTransform;
-
-	NewTransform.Scale = FMath::Lerp(
-		FocusStartTransform.Scale,
-		FocusTargetTransform.Scale,
-		EaseAlpha
-	);
-
+	FWidgetTransform NewTransform;
 	NewTransform.Translation = FMath::Lerp(
 		FocusStartTransform.Translation,
 		FocusTargetTransform.Translation,
 		EaseAlpha
 	);
+	NewTransform.Scale = FMath::Lerp(
+		FocusStartTransform.Scale,
+		FocusTargetTransform.Scale,
+		EaseAlpha
+	);
+	NewTransform.Shear = FMath::Lerp(
+		FocusStartTransform.Shear,
+		FocusTargetTransform.Shear,
+		EaseAlpha
+	);
+	NewTransform.Angle = FMath::Lerp(
+		FocusStartTransform.Angle,
+		FocusTargetTransform.Angle,
+		EaseAlpha
+	);
 
-	NewTransform = GetClampedMapTransform(NewTransform);
-
-	Image_Map->SetRenderTransform(NewTransform);
+	CanvasPanel_MapContent->SetRenderTransform(NewTransform);
 
 	if (Alpha >= 1.f)
 	{
 		bIsFocusAnimating = false;
-		Image_Map->SetRenderTransform(FocusTargetTransform);
+		CanvasPanel_MapContent->SetRenderTransform(FocusTargetTransform);
 	}
+}
+
+void UECPannableMapWidget::HandleMapNodeClicked(UECMapNodeWidget* MapNodeWidget)
+{
+	FVector2D MapLocalPosition = GetMapNodeCenter(MapNodeWidget);
+
+	FocusMapAtLocalPosition(MapLocalPosition, TargetZoomInScale);
+	ShowMapNodeInfo(MapNodeWidget, MapLocalPosition);
 }
 
 void UECPannableMapWidget::FocusMapAtLocalPosition(const FVector2D& MapLocalPosition, float TargetScale)
 {
-	if (!CanvasPanel_Root || !Image_Map)
+	if (!CanvasPanel_Root || !CanvasPanel_MapContent)
 	{
 		return;
 	}
 
-	const FVector2D CanvasSize = CanvasPanel_Root->GetCachedGeometry().GetLocalSize();
-	const FVector2D MapSize = Image_Map->GetDesiredSize();
-
-	if (MapSize.IsNearlyZero())
+	const FVector2D ViewSize = CanvasPanel_Root->GetCachedGeometry().GetLocalSize();
+	const FVector2D MapSize = CanvasPanel_MapContent->GetCachedGeometry().GetLocalSize();
+	
+	if (MapSize.X <= KINDA_SMALL_NUMBER || MapSize.Y <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
 
-	const float MinScale = CanvasSize.X / MapSize.X;
-	const float MaxScale = 3.f;
+	// 축소했을 때 맵 바깥의 빈 영역이 드러나지 않는 최소 배율입니다.
+	const float MinScale = FMath::Max(ViewSize.X / MapSize.X, ViewSize.Y / MapSize.Y);
+	const float ClampedScale = FMath::Clamp(TargetScale, MinScale, MaxZoomScale);
 
-	TargetScale = FMath::Clamp(TargetScale, MinScale, MaxScale);
-
-	FocusStartTransform = Image_Map->GetRenderTransform();
-	FocusTargetTransform = FocusStartTransform;
-
-	FocusTargetTransform.Scale = FVector2D(TargetScale, TargetScale);
+	FWidgetTransform TargetTransform = CanvasPanel_MapContent->GetRenderTransform();
+	TargetTransform.Scale = FVector2D(ClampedScale, ClampedScale);
 
 	const FVector2D MapCenter = MapSize * 0.5f;
+	// 선택한 맵 좌표가 고정 화면의 중앙에 오도록 이동합니다.
+	TargetTransform.Translation = -(MapLocalPosition - MapCenter) * ClampedScale;
 
-	// MapLocalPosition이 화면 중앙에 오도록 Translation 계산
-	FocusTargetTransform.Translation = -(MapLocalPosition - MapCenter) * TargetScale;
+	StartMapTransformAnimation(GetClampedMapTransform(TargetTransform));
+}
 
-	// 가장자리 밖으로 못 나가게 보정
-	FocusTargetTransform = GetClampedMapTransform(FocusTargetTransform);
+FVector2D UECPannableMapWidget::GetMapNodeCenter(const UECMapNodeWidget* MapNodeWidget) const
+{
+	if (!MapNodeWidget || !CanvasPanel_MapContent)
+	{
+		return FVector2D::ZeroVector;
+	}
 
+	const UCanvasPanelSlot* NodeSlot = Cast<UCanvasPanelSlot>(MapNodeWidget->Slot);
+	if (!NodeSlot)
+	{
+		return FVector2D::ZeroVector;
+	}
+
+	const FVector2D MapSize = CanvasPanel_MapContent->GetCachedGeometry().GetLocalSize();
+	const FAnchors Anchors = NodeSlot->GetAnchors();
+
+	// 맵 노드는 Stretch가 아닌 단일 Anchor 사용을 전제로 합니다.
+	const FVector2D AnchorPosition(MapSize.X * Anchors.Minimum.X,MapSize.Y * Anchors.Minimum.Y);
+	const FVector2D NodeSize = MapNodeWidget->GetCachedGeometry().GetLocalSize();
+	const FVector2D Alignment =	NodeSlot->GetAlignment();
+	
+	return AnchorPosition + NodeSlot->GetPosition() + (FVector2D(0.5f, 0.5f) - Alignment) * NodeSize;
+}
+
+void UECPannableMapWidget::StartMapTransformAnimation(const FWidgetTransform& TargetTransform)
+{
+	if (!CanvasPanel_MapContent)
+	{
+		return;
+	}
+
+	FocusStartTransform = CanvasPanel_MapContent->GetRenderTransform();
+	FocusTargetTransform = TargetTransform;
 	FocusAnimElapsed = 0.f;
 	bIsFocusAnimating = true;
 }
 
 FWidgetTransform UECPannableMapWidget::GetClampedMapTransform(FWidgetTransform Transform) const
 {
-	if (!CanvasPanel_Root || !Image_Map)
+	if (!CanvasPanel_Root || !CanvasPanel_MapContent)
 	{
 		return Transform;
 	}
 
 	const FVector2D CanvasSize = CanvasPanel_Root->GetCachedGeometry().GetLocalSize();
-	const FVector2D MapSize = Image_Map->GetDesiredSize();
+	const FVector2D MapSize = CanvasPanel_MapContent->GetCachedGeometry().GetLocalSize();
 
 	const float ScaledWidth = MapSize.X * Transform.Scale.X;
 	const float ScaledHeight = MapSize.Y * Transform.Scale.Y;
@@ -229,41 +203,51 @@ FWidgetTransform UECPannableMapWidget::GetClampedMapTransform(FWidgetTransform T
 	return Transform;
 }
 
-void UECPannableMapWidget::HandleMapNodeClicked(UECMapNodeWidget* MapNodeWidget)
+void UECPannableMapWidget::ResetMapScale()
 {
-	if (!MapNodeWidget)
+	StartMapTransformAnimation(InitialMapTransform);
+}
+
+void UECPannableMapWidget::ShowMapNodeInfo(UECMapNodeWidget* MapNodeWidget, const FVector2D& MapLocalPosition)
+{
+	if (!MapNodeWidget || !CanvasPanel_MapContent || !MapNodeInfoWidget)
 	{
 		return;
 	}
 
-	const FVector2D MapLocalPosition = MapNodeWidget->GetMapLocalPosition();
+	const FVector2D MapSize = CanvasPanel_MapContent->GetCachedGeometry().GetLocalSize();
+	// 오른쪽 노드를 눌렀다면 정보창은 왼쪽에 표시합니다.
+	const bool bShowOnLeft = MapLocalPosition.X > MapSize.X * 0.5f;
 
-	FocusMapAtLocalPosition(MapLocalPosition, TargetZoomInScale);
+	SetMapNodeInfoSide(bShowOnLeft);
+	// @TODO: 맵 지역의 이름 데이터 변경하기
+	MapNodeInfoWidget->SetMapName(FText::FromName(MapNodeWidget->MyNodeTag.GetTagName()));
+	MapNodeInfoWidget->SetVisibility(ESlateVisibility::Visible);
 }
 
-
-void UECPannableMapWidget::ClampMapTransform()
+void UECPannableMapWidget::SetMapNodeInfoSide(bool bShowOnLeft)
 {
-	FWidgetTransform Transform = Image_Map->GetRenderTransform();
+	if (!MapNodeInfoWidget)
+	{
+		return;
+	}
 
-	const FVector2D CanvasSize= CanvasPanel_Root->GetCachedGeometry().GetLocalSize();
-	const FVector2D MapSize = Image_Map->GetDesiredSize();
+	UCanvasPanelSlot* InfoSlot = Cast<UCanvasPanelSlot>(MapNodeInfoWidget->Slot);
+	if (!InfoSlot)
+	{
+		return;
+	}
 
-	const float ScaledWidth  = MapSize.X * Transform.Scale.X;
-	const float ScaledHeight = MapSize.Y * Transform.Scale.Y;
-
-	const float MaxOffsetX = FMath::Max(0.f, (ScaledWidth - CanvasSize.X) * 0.5f);
-	const float MaxOffsetY = FMath::Max(0.f, (ScaledHeight - CanvasSize.Y) * 0.5f);
-
-	Transform.Translation.X =
-		FMath::Clamp(Transform.Translation.X,
-					 -MaxOffsetX,
-					  MaxOffsetX);
-
-	Transform.Translation.Y =
-		FMath::Clamp(Transform.Translation.Y,
-					 -MaxOffsetY,
-					  MaxOffsetY);
-
-	Image_Map->SetRenderTransform(Transform);
+	if (bShowOnLeft)
+	{
+		InfoSlot->SetAnchors(FAnchors(0.f, 0.5f));
+		InfoSlot->SetAlignment(FVector2D(0.f, 0.5f));
+		InfoSlot->SetPosition(FVector2D(MapNodeInfoSideMargin,0.f));
+	}
+	else
+	{
+		InfoSlot->SetAnchors(FAnchors(1.f, 0.5f));
+		InfoSlot->SetAlignment(FVector2D(1.f, 0.5f));
+		InfoSlot->SetPosition(FVector2D(-MapNodeInfoSideMargin,0.f));
+	}
 }

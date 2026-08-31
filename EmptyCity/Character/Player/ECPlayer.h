@@ -2,14 +2,17 @@
 
 #include "CoreMinimal.h"
 #include "Character/ECCharacterBase.h"
+#include "GameplayTagContainer.h"
 #include "ECPlayer.generated.h"
 
+class UECQuickBarComponent;
+class UECInventoryManagerComponent;
 class UECInventoryItemDefinition;
 class UECEquipmentManagerComponent;
+class UECWeaponInstance;
 class UECCameraComponent;
 class UInputMappingContext;
 class UECInputConfig;
-struct FGameplayTag;
 struct FInputActionValue;
 
 /** 게임 시작 시 지급할 초기 아이템 한 개의 설정입니다. (인벤토리 지급 + 선택적 QuickBar 등록) */
@@ -58,6 +61,9 @@ private:
 	/** 게임 시작 시 InitialInventoryItems에 설정된 기본 아이템들을 인벤토리에 채워 넣습니다. (BeginPlay에서 호출) */
 	void AddInitialInventory();
 	
+	/** 게임 시작 시 DefaultWeapon으로 지정한 무기를 장착합니다. */
+	void EquipWeapon();
+	
 	
 // ─────────────────────────────────────────────────────────────
 // Input Method
@@ -68,6 +74,9 @@ private:
 	
 	/** 플레이어의 마우스 움직임에 따라 카메라를 회전하기 위한 바인딩 함수입니다. */
 	void Input_LookMouse(const FInputActionValue& InputActionValue);
+	
+	/** QuickBar 번호 키 입력에 따라 해당 슬롯의 아이템 사용을 요청하는 바인딩 함수입니다. (QuickBar는 Controller 소유이므로 Controller를 통해 접근) */
+    void Input_UseQuickSlot(const FInputActionValue& InputActionValue, int32 SlotIndex);
 
 	/** InputTag 입력에 따라 Ability를 발동시키기 위한 바인딩 함수입니다. */
 	void Input_AbilityInputTagPressed(FGameplayTag InputTag);
@@ -75,8 +84,15 @@ private:
 	/** InputTag 입력 종료에 따라 Ability를 중단하기 위한 바인딩 함수입니다. */
 	void Input_AbilityInputTagReleased(FGameplayTag InputTag);
 
-	/** QuickBar 번호 키 입력에 따라 해당 슬롯의 아이템 사용을 요청하는 바인딩 함수입니다. (QuickBar는 Controller 소유이므로 Controller를 통해 접근) */
-	void Input_UseQuickSlot(const FInputActionValue& InputActionValue, int32 SlotIndex);
+	
+		
+// ─────────────────────────────────────────────────────────────
+// Tag Query
+// ─────────────────────────────────────────────────────────────
+private:
+	/** ASC가 MovementBlockingTags 중 하나라도 보유하고 있는지 확인합니다. */
+	bool HasAnyMovementBlockingTag() const;
+	
 	
 	
 // ─────────────────────────────────────────────────────────────
@@ -107,6 +123,10 @@ protected:
 	/** 플레이어에게 부여할 InputMappingContext입니다. */
 	UPROPERTY(EditDefaultsOnly, Category = "변수|입력")
 	TArray<TSoftObjectPtr<UInputMappingContext>> InputMappingContexts;
+
+	/** 플레이어가 하나라도 보유하고 있으면 이동 입력을 차단하는 GameplayTag 목록입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "변수|입력|이동 차단", meta = (Categories = "Status"))
+	TArray<FGameplayTag> MovementBlockingTags;
 	
 	
 // ─────────────────────────────────────────────────────────────
@@ -116,5 +136,27 @@ protected:
 	/** 게임 시작 시 인벤토리에 기본으로 지급할 아이템 목록입니다. (항목별로 QuickBar 슬롯 등록 여부를 지정할 수 있습니다) */
 	UPROPERTY(EditDefaultsOnly, Category = "변수|인벤토리")
 	TArray<FInitialInventoryItem> InitialInventoryItems;
+	
+	/** 기본으로 장착할 무기입니다. */
+	UPROPERTY(EditDefaultsOnly, Category = "변수|무기")
+	TSubclassOf<UECInventoryItemDefinition> DefaultWeapon;
+	
+	
+	
+// ─────────────────────────────────────────────────────────────
+// Getter
+// ─────────────────────────────────────────────────────────────
+public:
+	FORCEINLINE USkeletalMeshComponent* GetFirstPersonMesh() const { return FirstPersonMesh; }
+	UECWeaponInstance* GetEquippedWeapon() const;
+	
+	
+	
+// ─────────────────────────────────────────────────────────────
+// Cached Variable
+// ─────────────────────────────────────────────────────────────
+private:
+	TWeakObjectPtr<UECInventoryManagerComponent> InventoryManagerComponent;
+	TWeakObjectPtr<UECQuickBarComponent> QuickBarComponent;
 	
 };

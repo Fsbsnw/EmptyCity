@@ -1,63 +1,84 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "UI/ViewModel/InventoryViewModel.h"
 
-#include "Character/Player/Controller/ECPlayerController.h"
+#include "Inventory/ECInventoryItemInstance.h"
 #include "Inventory/ECInventoryManagerComponent.h"
 
-void UInventoryViewModel::BindCallbacksToDependencies(AActor* ContextActor)
+namespace
 {
-	if (!ContextActor) return;
+    const TArray<FInventoryEntry>& GetEmptyInventoryEntries()
+    {
+        static const TArray<FInventoryEntry> EmptyEntries;
+        return EmptyEntries;
+    }
+}
 
-	// 1. 넘어온 액터를 인터페이스로 직접 캐스팅
-	if (IIECInventory* InventoryInterface = Cast<IIECInventory>(ContextActor))
-	{
-		CachedInventory = InventoryInterface->GetInventoryManagerComponent();
-	}
-	// 2. Pawn인 경우 컨트롤러를 검사
-	else if (APawn* ContextPawn = Cast<APawn>(ContextActor))
-	{
-		if (AController* PC = ContextPawn->GetController())
-		{
-			// 컨트롤러도 인터페이스 캐스팅 검사
-			if (IIECInventory* PCInterface = Cast<IIECInventory>(PC))
-			{
-				CachedInventory = PCInterface->GetInventoryManagerComponent();
-			}
-		}
-	}
+void UInventoryViewModel::Initialize(UECInventoryManagerComponent* InInventoryComponent)
+{
+    /*
+     * 같은 ViewModel을 다른 인벤토리로 재설정할 경우를 대비해
+     * 기존 델리게이트 연결을 제거합니다.
+     */
+    if (UECInventoryManagerComponent* PreviousInventory = InventoryComponent.Get())
+    {
+        PreviousInventory->OnInventoryUpdated.RemoveAll(this);
+    }
 
-	// 3. 최종 델리게이트 바인딩
-	if (CachedInventory)
-	{
-		CachedInventory->OnInventoryUpdated.AddUObject(this, &ThisClass::OnInventoryUpdated);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("인벤토리 인터페이스를 찾을 수 없습니다: %s"), *ContextActor->GetName());
-	}
+    InventoryComponent = InInventoryComponent;
+
+    if (UECInventoryManagerComponent* Inventory = InventoryComponent.Get())
+    {
+        Inventory->OnInventoryUpdated.AddUObject(this, &ThisClass::OnInventoryUpdated);
+    }
+
+    OnVMInventoryUpdated.Broadcast();
 }
 
 void UInventoryViewModel::BroadcastInitialValues()
 {
-	Super::BroadcastInitialValues();
-	
-	OnVMInventoryUpdated.Broadcast();
+    Super::BroadcastInitialValues();
+
+    OnVMInventoryUpdated.Broadcast();
 }
 
 const TArray<FInventoryEntry>& UInventoryViewModel::GetInventoryEntries() const
 {
-	if (CachedInventory)
-	{
-		return CachedInventory->InventoryList.Entries;
-	}
-	// 컴포넌트 없는 경우 대비
-	static TArray<FInventoryEntry> EmptyEntries;
-	return EmptyEntries;
+    const UECInventoryManagerComponent* Inventory = InventoryComponent.Get();
+
+    return Inventory ? Inventory->InventoryList.Entries : GetEmptyInventoryEntries();
+}
+
+bool UInventoryViewModel::ContainsItem(UECInventoryItemInstance* ItemInstance) const
+{
+    if (!IsValid(ItemInstance))
+    {
+        return false;
+    }
+
+    return GetInventoryEntries().ContainsByPredicate(
+        [ItemInstance](const FInventoryEntry& Entry)
+        {
+            return Entry.Instance == ItemInstance && Entry.StackCount > 0;
+        });
+}
+
+bool UInventoryViewModel::HasInventory() const
+{
+    return InventoryComponent.IsValid();
 }
 
 void UInventoryViewModel::OnInventoryUpdated()
 {
-	OnVMInventoryUpdated.Broadcast();
+    OnVMInventoryUpdated.Broadcast();
+}
+
+void UInventoryViewModel::BeginDestroy()
+{
+    if (UECInventoryManagerComponent* Inventory = InventoryComponent.Get())
+    {
+        Inventory->OnInventoryUpdated.RemoveAll(this);
+    }
+
+    InventoryComponent.Reset();
+
+    Super::BeginDestroy();
 }

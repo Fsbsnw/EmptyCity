@@ -1,5 +1,3 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
 #include "Subsystem/ECGameplayMessageSubsystem.h"
 
 #include "ECMessageTypes.h"

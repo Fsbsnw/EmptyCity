@@ -6,13 +6,15 @@
 #include "Character/ECCharacterBase.h"
 #include "ECEnemyCharacterBase.generated.h"
 
+class AECProjectileBase;
+class UECCombatSet;
 class UECMoveSpeedSet;
 class UECHealthSet;
 class UWidgetComponent;
 class UAIPerceptionComponent;
 class UECAbilitySet;
-class UBehaviorTree;
-class UBehaviorTreeComponent;
+class UECItemDropComponent;
+class UStateTree;
 /**
  * 
  */
@@ -20,21 +22,36 @@ UCLASS()
 class EMPTYCITY_API AECEnemyCharacterBase : public AECCharacterBase
 {
 	GENERATED_BODY()
+	
 public:
 	AECEnemyCharacterBase(const FObjectInitializer& ObjectInitializer);
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void BeginPlay() override;
+	virtual void OnDeathStarted(AActor* OwningActor) override;
+
+// ─────────────────────────────────────────────────────────────
+// Item Drop
+// ─────────────────────────────────────────────────────────────
+protected:
+	/** 사망 시 아이템 드롭을 생성하는 컴포넌트입니다. */
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UECItemDropComponent> ItemDropComponent;
 
 // ─────────────────────────────────────────────────────────────
 // AI
 // ─────────────────────────────────────────────────────────────	
 
 public:
-	UBehaviorTree* GetBehaviorTree() const { return BehaviorTree; }
+	/** 이 적 클래스가 사용할 StateTree 에셋을 반환합니다. */
+	UStateTree* GetStateTreeAsset() const { return StateTreeAsset; }
 
 protected:
-	UPROPERTY(EditDefaultsOnly, Category = "AI")
-	TObjectPtr<UBehaviorTree> BehaviorTree;
+	/**
+	 * 이 캐릭터 클래스가 사용할 StateTree 에셋입니다.
+	 * 각 Enemy Character Blueprint의 Class Defaults에서 지정합니다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI|StateTree")
+	TObjectPtr<UStateTree> StateTreeAsset = nullptr;
 
 
 // ─────────────────────────────────────────────────────────────
@@ -51,13 +68,17 @@ private:
 // Attribute Variable
 // ─────────────────────────────────────────────────────────────
 protected:
-	// 반드시 UPROPERTY를 붙여서 주인이 있다는 것을 엔진에 알려야 합니다.
+	// 체력 Attribute Set
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UECHealthSet> HealthSet;
 
-	// 반드시 UPROPERTY를 붙여서 주인이 있다는 것을 엔진에 알려야 합니다.
+	// 이동속도 Attribute Set
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UECMoveSpeedSet> MoveSpeedSet;
+	
+	// 전투 Attribute Set
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+	TObjectPtr<UECCombatSet> CombatSet;
 
 	/** MoveSpeed Attribute가 변경될 때마다 CharacterMovementComponent에 적용해 주는 함수 */
 	void OnMoveSpeedChanged(const FOnAttributeChangeData& Data);
@@ -72,17 +93,20 @@ protected:
 	
 
 // ─────────────────────────────────────────────────────────────
-// HealthBar Method
+// HealthBar Component
 // ─────────────────────────────────────────────────────────────
 private:
 	void InitializeHealthBarComponent();
 
-// ─────────────────────────────────────────────────────────────
-// HealthBar Widget Component
-// ─────────────────────────────────────────────────────────────
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Widget")
 	TObjectPtr<UWidgetComponent> HealthBarComponent;
+
+// ─────────────────────────────────────────────────────────────
+// HitReaction Component
+// ─────────────────────────────────────────────────────────────
+private:
+	void InitializeHitReactionComponent();
 	
 // ─────────────────────────────────────────────────────────────
 // Ability Method
@@ -96,6 +120,6 @@ private:
 // ─────────────────────────────────────────────────────────────
 private:
 	/** 적이 기본으로 사용하는 어빌리티에 대한 정보입니다. */
-	UPROPERTY(EditDefaultsOnly, Category = "변수|어빌리티")
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Abilities")
 	TArray<TObjectPtr<UECAbilitySet>> DefaultAbilitySets;
 };

@@ -41,8 +41,8 @@ struct FInventoryList
 // ─────────────────────────────────────────────────────────────
 // Entry
 // ─────────────────────────────────────────────────────────────
-	/** 설계도와 개수를 받아 아이템 인스턴스를 생성하고 목록에 추가한 뒤, 생성된 인스턴스를 반환합니다. */
-	UECInventoryItemInstance* AddEntry(TSubclassOf<UECInventoryItemDefinition> ItemDef, int32 StackCount);
+	/** 기존 스택을 먼저 채운 뒤 남은 수량을 새 슬롯으로 분할하고, 처음 변경된 아이템 인스턴스를 반환합니다. */
+	UECInventoryItemInstance* AddEntry(TSubclassOf<UECInventoryItemDefinition> ItemDef, int32 StackCount, int32 StackMax, int32 MaxSlots);
 
 	/** 지정한 아이템 인스턴스를 가진 엔트리를 목록에서 찾아 제거합니다. */
 	void RemoveEntry(UECInventoryItemInstance* ItemInstance);
@@ -77,6 +77,7 @@ class EMPTYCITY_API UECInventoryManagerComponent : public UActorComponent
 
 public:
 	UECInventoryManagerComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+	static constexpr int32 MaxInventorySlots = 20;
 
 // ─────────────────────────────────────────────────────────────
 // Add / Remove
@@ -89,11 +90,28 @@ public:
 	void RemoveItemInstance(UECInventoryItemInstance* ItemInstance);
 
 	/** 해당 설계도의 아이템을 인벤토리에 추가할 수 있는지 검사합니다. (최대 보유량·중복 제한 등의 판정 지점) */
-	bool CanAddItemDefinition(TSubclassOf<UECInventoryItemDefinition> ItemDef, int32 StackCount = 1);
+	bool CanAddItemDefinition(TSubclassOf<UECInventoryItemDefinition> ItemDef, int32 StackCount = 1) const;
 
-	/** 인벤토리에 아이템이 추가될 때 호출하는 델리게이트입니다. */
+	/** 인벤토리에 아이템의 상태가 변경될 때 호출하는 델리게이트입니다. */
 	FOnInventoryUpdatedSignature OnInventoryUpdated;
 
+	/** 대상 인벤토리로 모든 아이템을 이동시킵니다. */
+	int32 TransferAllItemsTo(UECInventoryManagerComponent* TargetInventory);
+
+	/** 대상 인벤토리로 아이템을 이동시킵니다. */
+	int32 TransferItemTo(UECInventoryManagerComponent* TargetInventory, UECInventoryItemInstance* ItemInstance, int32 Count = 1);
+
+	/** 지정한 아이템 인스턴스의 수량을 제거합니다. */
+	int32 RemoveItemCount(UECInventoryItemInstance* ItemInstance, int32 Count = 1);
+	
+// ─────────────────────────────────────────────────────────────
+// Weight
+// ─────────────────────────────────────────────────────────────
+public:
+	/** 현재 인벤토리에 보관된 모든 아이템의 총 무게를 반환합니다. */
+	float GetTotalWeight() const;
+
+	
 // ─────────────────────────────────────────────────────────────
 // Consume
 // ─────────────────────────────────────────────────────────────

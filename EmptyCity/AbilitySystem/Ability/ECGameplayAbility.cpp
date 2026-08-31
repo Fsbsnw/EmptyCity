@@ -1,5 +1,6 @@
 ﻿#include "ECGameplayAbility.h"
 #include "AbilitySystemComponent.h"
+#include "ECGameplayTags.h"
 #include "ECLogChannels.h"
 #include "AbilitySystem/ECAbilitySystemComponent.h"
 #include "AbilitySystem/Cost/ECAbilityCost.h"
@@ -11,6 +12,8 @@ UECGameplayAbility::UECGameplayAbility()
 {
 	ActivationPolicy = EAbilityActivationPolicy::OnInputTriggered;
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+
+	ActivationBlockedTags.AddTag(ECGameplayTags::Status_Death);
 }
 
 void UECGameplayAbility::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)

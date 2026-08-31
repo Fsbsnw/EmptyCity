@@ -3,6 +3,8 @@
 
 #include "Subsystem/ECProgressionSubsystem.h"
 
+#include "ECGameplayMessageSubsystem.h"
+#include "ECGameplayTags.h"
 #include "Core/Setting/ECProgressionSettings.h"
 #include "Inventory/ECInventoryItemDefinition.h"
 #include "Inventory/Fragment/InventoryFragment_Unlockable.h"
@@ -49,6 +51,17 @@ void UECProgressionSubsystem::UnlockContent(FGameplayTag UnlockTag)
 	if (!UnlockedTags.HasTagExact(UnlockTag))
 	{
 		UnlockedTags.AddTag(UnlockTag);
+		
+		UECGameplayMessageSubsystem& MessageSubsystem = UECGameplayMessageSubsystem::Get(this);
+		FECNotificationMessage Notification;
+		Notification.TargetChannel = TAG_Notification_ContentUnlocked;
+		Notification.PayloadTag = UnlockTag;
+		Notification.PayloadMessage =
+			UnlockTag.MatchesTag(ECGameplayTags::MapNode_Location)
+				? FText::FromString(TEXT("지역 정보가 해금되었습니다."))
+				: FText::FromString(TEXT("아이템 정보가 해금되었습니다."));
+		
+		MessageSubsystem.BroadcastMessage(TAG_AddNotification_Message, Notification);
         
 		// 아직 플레이어가 연출을 보지 않았기 때문에 대기열에도 넣어둡니다.
 		PendingRevealTags.AddTag(UnlockTag); 

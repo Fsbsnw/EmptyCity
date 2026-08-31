@@ -4,6 +4,7 @@
 #include "AbilitySystem/ECAbilitySystemComponent.h"
 #include "AbilitySystem/Attribute/ECHealthSet.h"
 #include "GameplayAbilitiesModule.h"
+#include "AbilitySystem/Attribute/ECCombatSet.h"
 #include "AbilitySystem/Attribute/ECStaminaSet.h"
 #include "AbilitySystem/Attribute/ECMoveSpeedSet.h"
 
@@ -14,10 +15,12 @@ AECPlayerState::AECPlayerState()
 	CreateDefaultSubobject<UECHealthSet>(TEXT("HealthSet"));
 	CreateDefaultSubobject<UECStaminaSet>(TEXT("StaminaSet"));
 	CreateDefaultSubobject<UECMoveSpeedSet>(TEXT("MoveSpeedSet"));
+	CreateDefaultSubobject<UECCombatSet>(TEXT("CombatSet"));
 
 	StatLevels.Emplace(EPlayerStatType::Health,  1);
 	StatLevels.Emplace(EPlayerStatType::Stamina, 1);
 	StatLevels.Emplace(EPlayerStatType::MoveSpeed, 1);
+	StatLevels.Emplace(EPlayerStatType::Combat, 1);
 }
 
 void AECPlayerState::BeginPlay()
@@ -97,8 +100,6 @@ void AECPlayerState::LevelUpStat(EPlayerStatType StatType, int32 InLevel)
 
 void AECPlayerState::InitAbilities()
 {
-	ASC->InitAbilityActorInfo(this, GetPawn());
-	
 	for (UECAbilitySet* AbilitySet : DefaultAbilitySets)
 	{
 		if (AbilitySet)

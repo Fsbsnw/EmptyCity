@@ -15,6 +15,8 @@ UECGameplayAbility_Stun::UECGameplayAbility_Stun()
 	
 	// 스턴 상태 동안 Status 관련 태그를 부여합니다.(애니메이션, BT에서 연계 필요)
 	ActivationOwnedTags.AddTag(ECGameplayTags::Status_Debuff_Stun);
+
+	CancelAbilitiesWithTag.AddTag(ECGameplayTags::Ability);
 }
 
 void UECGameplayAbility_Stun::ActivateAbility(const FGameplayAbilitySpecHandle Handle,

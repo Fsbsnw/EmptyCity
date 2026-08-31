@@ -35,6 +35,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FText SubText;
 
+	/** 입력을 유지하는 동안 실행되는 상호작용인지 나타냅니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "변수|상호작용")
+	uint8 bHoldInteraction : 1 = false;
+
 	
 // ─────────────────────────────────────────────────────────────
 // Interaction Option 1
@@ -84,6 +88,7 @@ public:
 			TargetAbilitySystem == Other.TargetAbilitySystem &&
 			TargetInteractionAbilityHandle == Other.TargetInteractionAbilityHandle &&
 			InteractionWidgetClass == Other.InteractionWidgetClass &&
+			bHoldInteraction == Other.bHoldInteraction &&
 			Text.IdenticalTo(Other.Text) &&
 			SubText.IdenticalTo(Other.SubText);
 	}

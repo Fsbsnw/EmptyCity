@@ -23,6 +23,16 @@ void AECCharacterBase::Tick(float DeltaSeconds)
 	UpdateMovingTag();
 }
 
+void AECCharacterBase::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+
+	if (HealthComponent && HealthComponent->GetDeathState() != EDeathState::NotDead)
+	{
+		DisableMovementAndCollision();
+	}
+}
+
 void AECCharacterBase::UpdateMovingTag()
 {
 	// possess 이전에는 ASC가 아직 준비되지 않았으므로 건너뜁니다.
@@ -51,7 +61,24 @@ void AECCharacterBase::UpdateMovingTag()
 void AECCharacterBase::OnDeathStarted(AActor* OwningActor)
 {
 	StartDeathProcess();
-	DisableMovementAndCollision();
+
+	if (Controller)
+	{
+		Controller->SetIgnoreMoveInput(true);
+	}
+
+	UCharacterMovementComponent* MoveComp =	GetCharacterMovement();
+
+	if (MoveComp->IsMovingOnGround())
+	{
+		DisableMovementAndCollision();
+	}
+	else
+	{
+		// JumpAttack에서 MOVE_Flying을 사용 중이더라도
+		// 중력이 적용되도록 Falling으로 전환합니다.
+		MoveComp->SetMovementMode(MOVE_Falling);
+	}
 }
 
 void AECCharacterBase::OnDeathFinished(AActor* OwningActor)
@@ -104,27 +131,4 @@ void AECCharacterBase::DestroyDueToDeath()
 	
 	// 0.1초 후 파괴합니다.
 	SetLifeSpan(0.1f);
-}
-
-void AECCharacterBase::PlayHitStop(float TimeDuration, float TimeDilation)
-{
-	if (!bCanPlayHitStop)
-	{
-		return;
-	}
-    
-	// 1. 파라미터로 받은 배속(TimeDilation)을 적용하여 현재 액터의 시간을 느리게 만듦
-	this->CustomTimeDilation = TimeDilation;
-
-	// 2. 다단 히트 방지 (기존 타이머 취소)
-	GetWorld()->GetTimerManager().ClearTimer(HitStopTimerHandle);
-
-	// 3. 원상복구 타이머 실행
-	GetWorld()->GetTimerManager().SetTimer(HitStopTimerHandle, this, &ThisClass::RestoreTimeDilation, TimeDuration, false);
-}
-
-void AECCharacterBase::RestoreTimeDilation()
-{
-	// 시간을 원래대로(1.0) 복구합니다.
-	this->CustomTimeDilation = 1.0f;
 }

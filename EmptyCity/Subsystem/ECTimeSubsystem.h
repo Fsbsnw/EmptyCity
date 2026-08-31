@@ -20,10 +20,9 @@ enum class EECTimeOfDay : uint8
 	Evening		UMETA(DisplayName = "Evening")
 };
 
-DECLARE_MULTICAST_DELEGATE_ThreeParams(
+DECLARE_MULTICAST_DELEGATE_TwoParams(
 	FOnGameTimeChanged,
-	int32,
-	EECTimeOfDay,
+	int32, 
 	EECTimeOfDay
 );
 
@@ -38,7 +37,6 @@ class EMPTYCITY_API UECTimeSubsystem : public UGameInstanceSubsystem
 public:
 	static UECTimeSubsystem& Get(const UObject* WorldContextObject);
 	
-public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
 	/** 다음 날 아침으로 시간을 변경합니다. */
@@ -56,6 +54,8 @@ public:
 	/** 현재 날짜를 반환합니다. */
 	UFUNCTION(BlueprintPure)
 	int32 GetDay() const { return ECDay; }
+
+	FOnGameTimeChanged OnGameTimeChanged;
 
 private:
 	/** 지역 변경에 따라 시간대를 진행합니다. */

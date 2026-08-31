@@ -31,6 +31,14 @@ class EMPTYCITY_API AECPickupableItem : public AActor, public IInteractableTarge
 
 public:
 	AECPickupableItem();
+	virtual void BeginPlay() override;
+
+// ─────────────────────────────────────────────────────────────
+// Initialize
+// ─────────────────────────────────────────────────────────────
+public:
+	/** 런타임에 생성된 픽업 액터의 내용물을 지정하고 월드 외형을 적용합니다. */
+	void SetPickupInventory(const FInventoryPickup& InPickupInventory);
 
 // ─────────────────────────────────────────────────────────────
 // Interface
@@ -42,6 +50,16 @@ public:
 	/** IPickupable : 주울 때 인벤토리에 넘겨줄 내용물(StaticInventory)을 반환합니다. */
 	virtual FInventoryPickup GetPickupInventory() const override;
 
+
+// ─────────────────────────────────────────────────────────────
+// World Visual
+// ─────────────────────────────────────────────────────────────
+private:
+	/** StaticInventory의 첫 번째 아이템 Definition에서 WorldVisual Fragment를 찾아 Mesh에 적용합니다. */
+	void ApplyWorldVisual();
+
+
+
 // ─────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────
@@ -50,11 +68,12 @@ public:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UStaticMeshComponent> Mesh;
 
+
 // ─────────────────────────────────────────────────────────────
 // Variables
 // ─────────────────────────────────────────────────────────────
 protected:
-	/** 플레이어에게 제공할 상호작용 선택지입니다. InteractionAbilityToGrant에 줍기 어빌리티를 지정해 두세요. */
+	/** 플레이어에게 제공할 줍기 상호작용 선택지입니다. */
 	UPROPERTY(EditDefaultsOnly, Category = "변수")
 	FInteractionOption Option;
 

@@ -6,6 +6,7 @@
 #include "ECGameplayTags.h"
 #include "Character/Player/Controller/ECPlayerController.h"
 #include "Components/BoxComponent.h"
+#include "Subsystem/ECTimeSubsystem.h"
 #include "UI/Subsystem/UIManagerSubsystem.h"
 
 void AECBed::GatherInteractionOptions(const FInteractionQuery& InteractQuery, FInteractionOptionBuilder& OptionBuilder)
@@ -157,10 +158,13 @@ void AECBed::EndSleepSequence()
 void AECBed::OnFadeInCompleted()
 {
     // 캐릭터, UI 입력을 활성화합니다.
-    if (AECPlayerController* ECPC = Cast<AECPlayerController>(ActivePlayerController.Get()))
+    if (AECPlayerController* PC = Cast<AECPlayerController>(ActivePlayerController.Get()))
     {
-        ECPC->SetCinematicInputLocked(false);
+        PC->SetCinematicInputLocked(false);
     }
+
+    UECTimeSubsystem& TimeSubsystem = UECTimeSubsystem::Get(this);
+    TimeSubsystem.SleepUntilTomorrow();
 }
 
 void AECBed::ShowDreamUI()

@@ -21,7 +21,10 @@ enum class EAbilityActivationPolicy : uint8
 	WhileInputActive,
 	
 	// Avatar가 생성됐을 경우 바로 할당 (패시브 스킬)
-	OnSpawn
+	OnSpawn,
+
+	// GameplayEvent 또는 코드의 명시적인 요청으로 발동
+	ByGameplayEvent
 };
 
 UENUM(BlueprintType)

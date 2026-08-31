@@ -7,6 +7,7 @@
 #include "Engine/DataAsset.h"
 #include "CombatFeedbackDataAsset.generated.h"
 
+class UNiagaraSystem;
 class USoundBase;
 class UCameraShakeBase;
 
@@ -27,6 +28,15 @@ struct FCombatFeedbackResult
 	/** 타격 시 실행할 히트 스탑의 딜레이 시간입니다.. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float HitStopTimeDilation = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TObjectPtr<UNiagaraSystem> HitVFX = nullptr;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector VFXScale = FVector::OneVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TObjectPtr<UNiagaraSystem> PlayerGroundWaveVFX = nullptr;
 };
 
 /** 에디터에서 설정할 조건(태그 2개)에 따른 피드백 정보 구조체 */
@@ -34,6 +44,10 @@ USTRUCT(BlueprintType)
 struct FCombatFeedbackRow
 {
 	GENERATED_BODY()
+
+	/** 공격 주체를 구분하는 태그입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FGameplayTag SourceTag;
 
 	/** 타격한 무기의 종류입니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -60,5 +74,8 @@ public:
 	TArray<FCombatFeedbackRow> CombatFeedbackRows;
 
 	/** 두 태그의 매칭 결과를 반환하는 함수입니다. */
-	FCombatFeedbackResult GetFeedbackResult(FGameplayTag InWeaponTag, FGameplayTag InAttackTag) const;
+	FCombatFeedbackResult GetFeedbackResult(
+		FGameplayTag InSourceTag,
+		FGameplayTag InWeaponTag,
+		FGameplayTag InAttackTag) const;
 };

@@ -6,6 +6,8 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "ECGameplayTags.h"
+#include "GameFramework/Pawn.h"
+#include "KismetAnimationLibrary.h"
 
 void UECEnemyAnimInstance::NativeInitializeAnimation()
 {
@@ -24,7 +26,28 @@ void UECEnemyAnimInstance::NativeInitializeAnimation()
 		// 설정한 태그 변화를 감지합니다.
 		ASC->RegisterGameplayTagEvent(ECGameplayTags::Status_Debuff_Stun, EGameplayTagEventType::NewOrRemoved)
 		   .AddUObject(this, &ThisClass::OnStunTagChanged);
+		
+		// 설정한 태그 변화를 감지합니다.
+		ASC->RegisterGameplayTagEvent(ECGameplayTags::Status_Death_Dying, EGameplayTagEventType::NewOrRemoved)
+		   .AddUObject(this, &ThisClass::OnDeathTagChanged);
 	}
+}
+
+void UECEnemyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
+{
+	Super::NativeUpdateAnimation(DeltaSeconds);
+
+	const APawn* OwningPawn = TryGetPawnOwner();
+	if (!IsValid(OwningPawn))
+	{
+		MoveSpeed = 0.0f;
+		MoveDirection = 0.0f;
+		return;
+	}
+
+	const FVector Velocity = OwningPawn->GetVelocity();
+	MoveSpeed = Velocity.Size2D();
+	MoveDirection = UKismetAnimationLibrary::CalculateDirection(Velocity, OwningPawn->GetActorRotation());
 }
 
 void UECEnemyAnimInstance::NativeUninitializeAnimation()
@@ -38,6 +61,7 @@ void UECEnemyAnimInstance::NativeUninitializeAnimation()
 		{
 			// 설정한 태그에 등록된 델리게이트를 제거합니다.
 			ASC->RegisterGameplayTagEvent(ECGameplayTags::Status_Debuff_Stun, EGameplayTagEventType::NewOrRemoved).RemoveAll(this);
+			ASC->RegisterGameplayTagEvent(ECGameplayTags::Status_Death_Dying, EGameplayTagEventType::NewOrRemoved).RemoveAll(this);
 		}
 	}
 
@@ -48,4 +72,9 @@ void UECEnemyAnimInstance::OnStunTagChanged(const FGameplayTag Tag, int32 NewCou
 {
 	// 태그 개수가 0보다 크면 스턴 진행 상태, 아니면 스턴 제거 상태
 	bIsStunned = (NewCount > 0);
+}
+
+void UECEnemyAnimInstance::OnDeathTagChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	bIsDead = (NewCount > 0);
 }

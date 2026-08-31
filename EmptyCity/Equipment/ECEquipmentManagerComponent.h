@@ -8,6 +8,7 @@
 class UECAbilitySystemComponent;
 class UECEquipmentInstance;
 class UECEquipmentDefinition;
+class UECWeaponInstance;
 
 /**
  * 현재 장착 중인 장비 하나를 표현하는 엔트리입니다.
@@ -105,6 +106,8 @@ public:
 	/** 장착된 인스턴스를 해제합니다. (OnUnequipped 발행 후 EquipmentList에서 엔트리 제거) */
 	void UnequipItem(UECEquipmentInstance* ItemInstance);
 
+	
+	
 // ─────────────────────────────────────────────────────────────
 // Query
 // ─────────────────────────────────────────────────────────────
@@ -113,6 +116,11 @@ public:
 	UFUNCTION(BlueprintCallable)
 	TArray<UECEquipmentInstance*> GetEquipmentInstancesOfType(TSubclassOf<UECEquipmentInstance> InstanceType) const;
 
+	/** 현재 장착 중인 무기 인스턴스를 반환합니다. */
+	UECWeaponInstance* GetEquippedWeapon() const { return CachedEquippedWeapon.Get(); }
+
+	
+	
 // ─────────────────────────────────────────────────────────────
 // Variables
 // ─────────────────────────────────────────────────────────────
@@ -120,5 +128,10 @@ public:
 	/** 이 Pawn이 현재 장착 중인 장비 목록입니다. */
 	UPROPERTY()
 	FEquipmentList EquipmentList;
+
+private:
+	/** 현재 장착 중인 무기 캐시입니다. 실제 소유권은 EquipmentList가 가집니다. */
+	UPROPERTY(Transient)
+	TWeakObjectPtr<UECWeaponInstance> CachedEquippedWeapon;
 
 };

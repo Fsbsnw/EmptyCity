@@ -19,10 +19,10 @@ void AECEnemyElite::BeginPlay()
 	GrantEliteBuffToMinions();
 }
 
-void AECEnemyElite::OnDeathFinished(AActor* OwningActor)
+void AECEnemyElite::OnDeathStarted(AActor* OwningActor)
 {
-	Super::OnDeathFinished(OwningActor);
-
+	Super::OnDeathStarted(OwningActor);
+	
 	FGameplayTagContainer BuffTagContainer;
 	BuffTagContainer.AddTag(ECGameplayTags::Status_Buff_EliteEmpowered);
 	
@@ -105,6 +105,6 @@ void AECEnemyElite::GrantEliteBuffToMinions()
 		Payload.TargetData.Add(TargetActors);
 
 		// 5. 이벤트를 발송하여 GA를 트리거합니다. (BuffAbilityTag 사용)
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, ECGameplayTags::Ability_Skill_GrantEliteBuff, Payload);
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, ECGameplayTags::Ability_Type_Skill_Buff_Elite, Payload);
 	}
 }

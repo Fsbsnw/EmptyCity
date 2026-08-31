@@ -10,6 +10,8 @@ class EMPTYCITY_API UECStaminaSet : public UECAttributeSet
 {
 	GENERATED_BODY()
 
+	friend struct FECDamageStatics;
+
 // ─────────────────────────────────────────────────────────────
 // AttributeSet Interface
 // ─────────────────────────────────────────────────────────────

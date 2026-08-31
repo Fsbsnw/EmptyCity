@@ -21,21 +21,16 @@ void UECGameplayAbility_PickupItem::ActivateAbility(const FGameplayAbilitySpecHa
 	AActor* TargetActor = const_cast<AActor*>(ToRawPtr(TriggerEventData->Target));                                                                                                                                                       
 	Pickupable = UPickupableStatics::GetFirstPickupableFromActor(TargetActor);
 	
-	PickUp();
-	
-	TargetActor->Destroy();
+	const bool bPickupSucceeded = PickUp();
+	if (bPickupSucceeded) TargetActor->Destroy();
 
 	// 즉시 처리되는 어빌리티이므로 곧바로 종료합니다.
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }
 
-void UECGameplayAbility_PickupItem::PickUp()
+bool UECGameplayAbility_PickupItem::PickUp()
 {
-	if (AController* Controller = GetECPlayerControllerFromActorInfo())
-	{
-		if (UECInventoryManagerComponent* InventoryComponent = Controller->GetComponentByClass<UECInventoryManagerComponent>())
-		{
-			UPickupableStatics::AddPickupToInventory(InventoryComponent, Pickupable);
-		}
-	}
+	AController* Controller = GetECPlayerControllerFromActorInfo();
+	UECInventoryManagerComponent* InventoryComponent = Controller->GetComponentByClass<UECInventoryManagerComponent>();
+	return UPickupableStatics::AddPickupToInventory(InventoryComponent, Pickupable);
 }
