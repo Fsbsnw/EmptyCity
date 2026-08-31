@@ -3,18 +3,21 @@
 > Unreal Engine 5.5 팀 프로젝트에서 **Enemy AI·Combat**과 **UI 시스템**을 담당했습니다.
 
 AI의 상태 판단부터 Gameplay Ability 실행, 전투 판정과 피드백까지 연결하고,
-GameplayTag 기반 UI 관리와 MVVM 구조로 게임플레이 데이터와 화면 로직을 분리했습니다.
+GameplayTag 기반 UI 관리와 MVVM 구조로 게임플레이 데이터와 화면 로직을 분리했습니다.  
 
-<!-- MEDIA_TODO: 01-hero.gif | 전투, 패링, 맵, 인벤토리를 15~20초 안에 보여주는 대표 GIF -->
+<br><br><br><br>
+
 
 ## 프로젝트 목차
 
 1. [프로젝트 개요](#프로젝트-개요)
 2. [프로젝트 역할](#프로젝트-역할)
-3. [Enemy AI & Combat](#1-enemy-ai--combat)
-4. [UI Architecture](#2-ui-architecture)
-5. [Event-driven Gameplay UI](#3-event-driven-gameplay-ui)
-6. [Additional Implementations](#additional-implementations)
+3. [적 AI & 전투](#1-적-ai--전투)
+4. [UI 구조 설계](#2-ui-구조-설계)
+5. [이벤트 기반 Gameplay UI](#3-이벤트-기반-gameplay-ui)
+6. [추가 구현](#추가-구현)
+
+<br><br><br><br>
 
 ## 프로젝트 개요
 
@@ -25,6 +28,8 @@ GameplayTag 기반 UI 관리와 MVVM 구조로 게임플레이 데이터와 화�
 | 언어 | C++, Blueprint |
 | 주요 기술 | Gameplay Ability System, Gameplay Tags, StateTree, AI Perception, UMG, MVVM |
 
+<br><br><br><br>
+
 ## 프로젝트 역할
 
 | 영역 | 주요 구현 |
@@ -33,9 +38,13 @@ GameplayTag 기반 UI 관리와 MVVM 구조로 게임플레이 데이터와 화�
 | UI Architecture | GameplayTag 기반 위젯 생명주기와 레이어·포커스·닫기 순서를 관리하는 UIManager |
 | Gameplay UI | 월드 위치 기반 Indicator와 메시지 기반 Notification을 프로젝트 구조에 맞게 이식·연동 |
 
-## 1. Enemy AI & Combat
+<br><br><br><br>
+
+## 1. 적 AI & 전투
 
 ### StateTree 기반 적 행동 구조
+
+<img width="1072" height="685" alt="Image" src="https://github.com/user-attachments/assets/50c5ad31-b7a1-4443-85cb-052e17b27ea3" />
 
 AI Controller는 감지 정보와 전투 대상을 관리하고, StateTree는 순찰·추적·공격과 상태 전환을 담당하도록 책임을 나눴습니다.
 빙의한 적 캐릭터의 StateTree 에셋을 런타임에 적용하고, 공통 행동은 재사용 가능한 노드로 분리했습니다.
@@ -53,6 +62,8 @@ AI Controller는 감지 정보와 전투 대상을 관리하고, StateTree는 �
 [ECEnemyAIController.cpp](./EmptyCity/Character/Enemy/AI/ECEnemyAIController.cpp) ·
 [STTask_ActivateAbility.cpp](./EmptyCity/Character/Enemy/AI/Statetree/STTask/STTask_ActivateAbility.cpp) ·
 [STTask_ApplyGEWhileActive.cpp](./EmptyCity/Character/Enemy/AI/Statetree/STTask/STTask_ApplyGEWhileActive.cpp)
+
+<br><br><br><br>
 
 ### GAS 기반 근접 전투 파이프라인
 
@@ -72,6 +83,8 @@ StateTree → Attack Ability → Montage Trace Window → HitResult
 [ECEnemyDamageAbility_Melee.cpp](./EmptyCity/AbilitySystem/Ability/Enemy/ECEnemyDamageAbility_Melee.cpp) ·
 [EnemyMeleeTraceComponent.cpp](./EmptyCity/Character/Enemy/Component/EnemyMeleeTraceComponent.cpp) ·
 [ECExecCalc_Damage.cpp](./EmptyCity/AbilitySystem/ExecCalc/ECExecCalc_Damage.cpp)
+
+<br><br><br><br>
 
 ### Troubleshooting: 패링 반응과 행동 완료 시점 동기화
 
@@ -105,7 +118,9 @@ StateTree의 공격 Task는 공격 Ability가 활성 상태인 동안 `Running`�
 > **추가 구현:** Stun 상태에서 피격 Event를 받으면 남은 시간에 연장 시간을 더하도록 구성했습니다.
 > [ECGameplayAbility_Stun.cpp](./EmptyCity/AbilitySystem/Ability/Enemy/ECGameplayAbility_Stun.cpp)
 
-## 2. UI Architecture
+<br><br><br><br>
+
+## 2. UI 구조 설계
 
 ### GameplayTag 기반 UIManager와 닫기 순서
 
@@ -125,6 +140,8 @@ UIManagerSubsystem은 DataAsset 설정을 바탕으로 생성, 레이어 배치,
 [ECUserWidget.cpp](./EmptyCity/UI/Widget/ECUserWidget.cpp) ·
 [UIConfigDataAsset.h](./EmptyCity/Data/UI/UIConfigDataAsset.h)
 
+<br><br><br><br>
+
 ### ContextActor 기반 ViewModel 생성과 주입
 
 위젯이 Subsystem이나 Actor를 직접 탐색하지 않도록 ViewModel 생성 경로를 공통화했습니다.
@@ -142,7 +159,9 @@ UIManager → Widget 생성 → ContextActor 기반 ViewModel 생성·주입 →
 [InventoryInteractionViewModel.cpp](./EmptyCity/UI/ViewModel/InventoryInteractionViewModel.cpp) ·
 [TimeViewModel.cpp](./EmptyCity/UI/ViewModel/TimeViewModel.cpp)
 
-## 3. Event-driven Gameplay UI
+<br><br><br><br>
+
+## 3. 이벤트 기반 Gameplay UI
 
 ### Object Indicator
 
@@ -154,6 +173,8 @@ UIManager → Widget 생성 → ContextActor 기반 ViewModel 생성·주입 →
 관련 코드:
 [ECGameplayAbility_Interact.cpp](./EmptyCity/AbilitySystem/Ability/Player/ECGameplayAbility_Interact.cpp) ·
 [ECIndicatorManagerComponent.cpp](./EmptyCity/UI/IndicatorSystem/ECIndicatorManagerComponent.cpp)
+
+<br><br><br><br>
 
 ### Gameplay Message 기반 Notification
 
@@ -169,6 +190,8 @@ UIManager → Widget 생성 → ContextActor 기반 ViewModel 생성·주입 →
 [ECGameplayMessageSubsystem.cpp](./EmptyCity/Subsystem/ECGameplayMessageSubsystem.cpp) ·
 [ECNotificationHostWidget.cpp](./EmptyCity/UI/Widget/Notification/ECNotificationHostWidget.cpp)
 
+<br><br><br><br>
+
 ### Progression과 해금 상태
 
 콘텐츠를 잠김, 해금, 새로 해금됐지만 아직 연출을 확인하지 않은 상태로 구분하여 해금 여부와 최초 확인 연출을 별도로 관리했습니다.
@@ -178,7 +201,9 @@ UIManager → Widget 생성 → ContextActor 기반 ViewModel 생성·주입 →
 관련 코드:
 [ECProgressionSubsystem.cpp](./EmptyCity/Subsystem/ECProgressionSubsystem.cpp)
 
-## Additional Implementations
+<br><br><br><br>
+
+## 추가 구현
 
 ### Inventory UI와 보관함 상호작용
 
@@ -195,6 +220,8 @@ Lyra 기반 Item Definition·Instance·Fragment의 UI 정보를 슬롯과 상세
 [ECInventoryManagerComponent.cpp](./EmptyCity/Inventory/ECInventoryManagerComponent.cpp) ·
 [ECPlayerInventoryWidget.cpp](./EmptyCity/UI/Widget/Inventory/Player/ECPlayerInventoryWidget.cpp) ·
 [InventoryInteractionViewModel.cpp](./EmptyCity/UI/ViewModel/InventoryInteractionViewModel.cpp)
+
+<br><br><br><br>
 
 ### 맵 노드 선택 기반 확대·포커싱
 
