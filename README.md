@@ -133,7 +133,7 @@ UIManagerSubsystem은 DataAsset 설정을 바탕으로 생성, 레이어 배치,
 - 최상위 창은 전역 스택, 상세 팝업은 부모의 자식 스택으로 관리하여 최근 팝업부터 닫기
 - Fade가 필요한 UI도 연출 완료 후 동일한 Toggle 경로 실행
 
-<img width="1307" height="625" alt="Image" src="https://github.com/user-attachments/assets/12fc3517-bed0-48ff-b06b-7aebfbe0f9b3" />
+<img width="1905" height="887" alt="침대 상호작용" src="https://github.com/user-attachments/assets/09c315a9-fcb9-4a6c-bfc6-ea7ecb86d414" />
 
 관련 코드:
 [UIManagerSubsystem.cpp](./EmptyCity/UI/Subsystem/UIManagerSubsystem.cpp) ·
@@ -229,7 +229,7 @@ Lyra 기반 Item Definition·Instance·Fragment의 UI 정보를 슬롯과 상세
 현재 Transform에서 목표값까지 EaseInOut 보간하며, 빈 영역이 노출되지 않도록 배율과 이동 범위를 제한했습니다.
 배경을 클릭하면 초기 상태로 돌아가고, 선택한 노드의 위치에 따라 정보창을 화면 반대편에 배치합니다.
 
-<img width="1307" height="625" alt="Image" src="https://github.com/user-attachments/assets/f9bdd125-e85f-46a4-8d01-70059e6e1e50" />
+<img width="1909" height="999" alt="맵 확대축소" src="https://github.com/user-attachments/assets/1133b8c7-d556-4e8a-82f4-cd0b661e2418" />
 
 관련 코드:
 [ECPannableMapWidget.cpp](./EmptyCity/UI/Widget/Map/ECPannableMapWidget.cpp) ·
