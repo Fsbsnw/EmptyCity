@@ -82,6 +82,12 @@ public:
 
 	/** 사망 상태 종료 시 호출되는 함수입니다. */
 	virtual void FinishDeath();
+
+	/** 플레이어 재시작을 위해 사망 상태를 해제하고 체력을 최대치로 복구합니다. */
+	void ResetDeath();
+
+	/** 사망 상태는 변경하지 않고 현재 체력만 최대 체력으로 복구합니다. */
+	void RestoreHealthToMax();
 	
 	/** 사망 상태 태그를 초기화하기 위한 함수입니다. Initialize/Uninitialize시 호출됩니다. */
 	void ClearGameplayTags();

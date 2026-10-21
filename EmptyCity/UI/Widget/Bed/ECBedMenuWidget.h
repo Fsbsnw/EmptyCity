@@ -17,11 +17,18 @@ class EMPTYCITY_API UECBedMenuWidget : public UECUserWidget
 	
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 	
 	UFUNCTION()
-	void OnSleepButtonClicked();
+	void OnSleepYesButtonClicked();
+
+	UFUNCTION()
+	void OnSleepNoButtonClicked();
 
 private:
 	UPROPERTY(meta = (BindWidget))
-	UButton* Button_Sleep;
+	TObjectPtr<UButton> Button_Sleep_Yes;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> Button_Sleep_No;
 };

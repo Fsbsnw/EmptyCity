@@ -5,7 +5,6 @@
 #include "Inventory/ECInventoryItemInstance.h"
 #include "Inventory/ECInventoryManagerComponent.h"
 #include "UI/ViewModel/InventoryViewModel.h"
-#include "UI/Widget/ECUserWidget.h"
 
 void UInventoryInteractionViewModel::BindCallbacksToDependencies(AActor* ContextActor)
 {
@@ -20,12 +19,9 @@ void UInventoryInteractionViewModel::BindCallbacksToDependencies(AActor* Context
     /*
      * 플레이어 인벤토리 검색
      */
-    if (const UECUserWidget* OwningWidget = GetTypedOuter<UECUserWidget>())
+    if (AECPlayerController* PlayerController = Cast<AECPlayerController>(GetPlayerController()))
     {
-        if (AECPlayerController* PlayerController = Cast<AECPlayerController>(OwningWidget->GetOwningPlayer()))
-        {
-            PlayerInventoryComponent = PlayerController->GetInventoryManagerComponent();
-        }
+        PlayerInventoryComponent = PlayerController->GetInventoryManagerComponent();
     }
 
     /*
@@ -132,14 +128,10 @@ int32 UInventoryInteractionViewModel::DiscardPlayerItem(UECInventoryItemInstance
     return PlayerInventory->RemoveItemCount(ItemInstance, Count);
 }
 
-int32 UInventoryInteractionViewModel::DiscardStorageItem(UECInventoryItemInstance* ItemInstance, int32 Count)
+AECInventoryContainer* UInventoryInteractionViewModel::GetStorageContainer() const
 {
-    UECInventoryManagerComponent* StorageInventory = StorageInventoryComponent.Get();
-
-    if (!StorageInventory || !IsValid(ItemInstance) || Count <= 0)
-    {
-        return 0;
-    }
-
-    return StorageInventory->RemoveItemCount(ItemInstance, Count);
+	const UECInventoryManagerComponent* StorageInventory = StorageInventoryComponent.Get();
+	return StorageInventory
+		? Cast<AECInventoryContainer>(StorageInventory->GetOwner())
+		: nullptr;
 }

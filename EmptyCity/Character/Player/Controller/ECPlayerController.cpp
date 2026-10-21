@@ -2,6 +2,7 @@
 
 #include "ECGameplayTags.h"
 #include "EnhancedInputSubsystems.h"
+#include "Framework/Application/SlateApplication.h"
 #include "AbilitySystem/ECAbilitySystemComponent.h"
 #include "Character/Player/CameraManager/ECPlayerCameraManager.h"
 #include "Character/Player/State/ECPlayerState.h"
@@ -9,10 +10,15 @@
 #include "Data/UI/UIConfigDataAsset.h"
 #include "Equipment/ECQuickBarComponent.h"
 #include "Input/ECInputComponent.h"
+#include "InputCoreTypes.h"
 #include "Inventory/ECInventoryManagerComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Subsystem/ECGameplayMessageSubsystem.h"
+#include "Subsystem/ECMessageTypes.h"
+#include "Subsystem/ECTutorialSubsystem.h"
 #include "UI/IndicatorSystem/ECIndicatorManagerComponent.h"
 #include "UI/Subsystem/UIManagerSubsystem.h"
+#include "UI/Widget/ECInvincibilityIndicatorWidget.h"
 
 AECPlayerController::AECPlayerController()
 {
@@ -46,12 +52,15 @@ UECIndicatorManagerComponent* AECPlayerController::GetIndicatorManagerComponent(
 
 void AECPlayerController::PostProcessInput(const float DeltaTime, const bool bGamePaused)
 {
-	if (const AECPlayerState* PS = GetPlayerState<AECPlayerState>())
+	if (PlayerInputLockCount == 0)
 	{
-		if (UECAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent())
+		if (const AECPlayerState* PS = GetPlayerState<AECPlayerState>())
 		{
-			ASC->ProcessAbilityInput(DeltaTime,bGamePaused);
-		}	
+			if (UECAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent())
+			{
+				ASC->ProcessAbilityInput(DeltaTime,bGamePaused);
+			}
+		}
 	}
 	
 	Super::PostProcessInput(DeltaTime, bGamePaused);
@@ -60,6 +69,17 @@ void AECPlayerController::PostProcessInput(const float DeltaTime, const bool bGa
 void AECPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
+
+	bShowMouseCursor = false;
+
+	FInputModeGameOnly InputMode;
+	InputMode.SetConsumeCaptureMouseDown(false);
+	SetInputMode(InputMode);
+
+	if (FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().SetAllUserFocusToGameViewport(EFocusCause::SetDirectly);
+	}
 	
 	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 	{
@@ -85,6 +105,17 @@ void AECPlayerController::BeginPlay()
 	}
 }
 
+bool AECPlayerController::InputKey(const FInputKeyParams& Params)
+{
+	if (Params.Key == EKeys::F5 && Params.Event == IE_Pressed)
+	{
+		Input_ToggleInvincibility();
+		return true;
+	}
+
+	return Super::InputKey(Params);
+}
+
 void AECPlayerController::InitializeUI()
 {
 	UWorld* World = GetWorld();
@@ -108,6 +139,12 @@ void AECPlayerController::InitializeUI()
 
 	// 3. HUD 초기화
 	UIManager->RequestToggleInput(ECGameplayTags::InputTag_UI_HUD, this->GetPawn());
+
+	if (UECTutorialSubsystem* TutorialSubsystem =
+		GetLocalPlayer()->GetSubsystem<UECTutorialSubsystem>())
+	{
+		TutorialSubsystem->InitializeTutorialUI();
+	}
 }
 
 void AECPlayerController::Input_UIAction(FGameplayTag InputTag)
@@ -120,19 +157,99 @@ void AECPlayerController::Input_UIAction(FGameplayTag InputTag)
 			UIManager->RequestToggleInput(InputTag, this->GetPawn());
 		}
 	}
+
+	FECTutorialInputMessage TutorialMessage;
+	TutorialMessage.PlayerController = this;
+	TutorialMessage.InputTag = InputTag;
+	UECGameplayMessageSubsystem::Get(this).BroadcastMessage(
+		TAG_Message_Tutorial_Input,
+		TutorialMessage);
 }
 
-void AECPlayerController::SetCinematicInputLocked(bool bIsLocked)
+void AECPlayerController::Input_ToggleInvincibility()
+{
+	AECPlayerState* PS = GetPlayerState<AECPlayerState>();
+	UECAbilitySystemComponent* ASC = PS ? PS->GetAbilitySystemComponent() : nullptr;
+	if (!ASC)
+	{
+		return;
+	}
+
+	bInvincibilityEnabled = !ASC->HasMatchingGameplayTag(ECGameplayTags::Status_Invincible);
+	ASC->SetLooseGameplayTagCount(
+		ECGameplayTags::Status_Invincible,
+		bInvincibilityEnabled ? 1 : 0);
+	RefreshInvincibilityIndicator();
+}
+
+void AECPlayerController::RefreshInvincibilityIndicator()
+{
+	if (!bInvincibilityEnabled)
+	{
+		if (InvincibilityIndicatorWidget)
+		{
+			InvincibilityIndicatorWidget->RemoveFromParent();
+			InvincibilityIndicatorWidget = nullptr;
+		}
+		return;
+	}
+
+	if (!InvincibilityIndicatorWidget)
+	{
+		InvincibilityIndicatorWidget = CreateWidget<UECInvincibilityIndicatorWidget>(this);
+		if (InvincibilityIndicatorWidget)
+		{
+			InvincibilityIndicatorWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+	}
+
+	if (InvincibilityIndicatorWidget && !InvincibilityIndicatorWidget->IsInViewport())
+	{
+		InvincibilityIndicatorWidget->AddToViewport(10000);
+	}
+}
+
+void AECPlayerController::SetPlayerInputLocked(bool bIsLocked)
 {
 	if (bIsLocked)
 	{
-		this->DisableInput(this);
-		if (APawn* MyPawn = GetPawn()) MyPawn->DisableInput(this);
+		++PlayerInputLockCount;
+		if (PlayerInputLockCount > 1)
+		{
+			return;
+		}
+
+		DisableInput(this);
+		if (APawn* MyPawn = GetPawn())
+		{
+			MyPawn->DisableInput(this);
+		}
+
+		if (const AECPlayerState* PS = GetPlayerState<AECPlayerState>())
+		{
+			if (UECAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent())
+			{
+				ASC->ClearAbilityInput();
+			}
+		}
 	}
 	else
 	{
-		this->EnableInput(this);
-		if (APawn* MyPawn = GetPawn()) MyPawn->EnableInput(this);
+		if (PlayerInputLockCount == 0)
+		{
+			return;
+		}
+
+		--PlayerInputLockCount;
+		if (PlayerInputLockCount > 0)
+		{
+			return;
+		}
+
+		EnableInput(this);
+		if (APawn* MyPawn = GetPawn())
+		{
+			MyPawn->EnableInput(this);
+		}
 	}
-	// SetCinematicMode()
 }

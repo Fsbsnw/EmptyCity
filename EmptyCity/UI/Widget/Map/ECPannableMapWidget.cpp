@@ -3,15 +3,38 @@
 
 #include "UI/Widget/Map/ECPannableMapWidget.h"
 
+#include "ECGameplayTags.h"
 #include "ECMapNodeInfoWidget.h"
 #include "ECMapNodeWidget.h"
+#include "ECRegionVisitLogWidget.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/PanelWidget.h"
+#include "Components/VerticalBox.h"
+#include "Data/Region/ECRegionTableRow.h"
+#include "Engine/GameInstance.h"
+#include "Subsystem/ECRegionSubsystem.h"
+#include "Subsystem/ECSoundSubsystem.h"
+#include "UI/Subsystem/UIManagerSubsystem.h"
+
+namespace MapSoundRows
+{
+	const FName TravelSuccess(TEXT("UI_Map_Travel_Success"));
+	const FName TravelFail(TEXT("UI_Map_Travel_Fail"));
+}
 
 void UECPannableMapWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	EnsureMapViewport();
+	EnsureMapNodeInfoInViewport();
+
+	UECRegionSubsystem& RegionSubsystem = UECRegionSubsystem::Get(this);
+	RegionSubsystem.OnRegionVisitHistoryChanged.RemoveAll(this);
+	RegionSubsystem.OnRegionVisitHistoryChanged.AddUObject(this, &ThisClass::HandleVisitHistoryChanged);
+	RefreshVisitHistory();
 
 	if (CanvasPanel_MapContent)
 	{
@@ -23,9 +46,7 @@ void UECPannableMapWidget::NativeConstruct()
 		return;
 	}
 
-	AllMapNodes.Reset();
-
-	// WBP에 배치된 맵 노드를 찾아 태그별로 캐싱합니다.
+	// WBP에 배치된 맵 노드의 클릭 이벤트를 연결합니다.
 	WidgetTree->ForEachWidget([this](UWidget* Widget)
 	{
 		UECMapNodeWidget* MapNode = Cast<UECMapNodeWidget>(Widget);
@@ -34,11 +55,204 @@ void UECPannableMapWidget::NativeConstruct()
 			return;
 		}
 
-		AllMapNodes.Add(MapNode->MyNodeTag, MapNode);
-
 		MapNode->OnNodeClicked.RemoveAll(this);
 		MapNode->OnNodeClicked.AddUObject(this, &ThisClass::HandleMapNodeClicked);
 	});
+}
+
+void UECPannableMapWidget::NativeDestruct()
+{
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UECRegionSubsystem* RegionSubsystem = GameInstance->GetSubsystem<UECRegionSubsystem>())
+		{
+			RegionSubsystem->OnRegionVisitHistoryChanged.RemoveAll(this);
+		}
+	}
+
+	Super::NativeDestruct();
+}
+
+void UECPannableMapWidget::RefreshVisitHistory()
+{
+	if (!VerticalBox_VisitHistory || !VisitHistoryEntryWidgetClass)
+	{
+		return;
+	}
+
+	VerticalBox_VisitHistory->ClearChildren();
+
+	const UECRegionSubsystem& RegionSubsystem = UECRegionSubsystem::Get(this);
+	const TArray<FECRegionVisitRecord>& VisitHistory = RegionSubsystem.GetVisitHistory();
+	const int32 VisibleEntryCount = FMath::Min(MaxVisibleVisitHistoryEntries, VisitHistory.Num());
+	for (int32 VisibleIndex = 0; VisibleIndex < VisibleEntryCount; ++VisibleIndex)
+	{
+		const FECRegionVisitRecord& Record = VisitHistory[VisitHistory.Num() - 1 - VisibleIndex];
+		const FECRegionTableRow* RegionDefinition = RegionSubsystem.FindRegionDefinition(Record.RegionTag);
+		if (!RegionDefinition)
+		{
+			continue;
+		}
+
+		UECRegionVisitLogWidget* VisitLogWidget = CreateWidget<UECRegionVisitLogWidget>(
+			GetOwningPlayer(),
+			VisitHistoryEntryWidgetClass
+		);
+		if (!VisitLogWidget)
+		{
+			continue;
+		}
+
+		VisitLogWidget->SetVisitRecord(Record, RegionDefinition->RegionVisitHistoryImage);
+		VerticalBox_VisitHistory->AddChildToVerticalBox(VisitLogWidget);
+	}
+}
+
+void UECPannableMapWidget::HandleVisitHistoryChanged()
+{
+	RefreshVisitHistory();
+}
+
+void UECPannableMapWidget::EnsureMapViewport()
+{
+	if (!WidgetTree || !CanvasPanel_MapContent)
+	{
+		return;
+	}
+
+	if (!CanvasPanel_MapViewport)
+	{
+		CanvasPanel_MapViewport = Cast<UCanvasPanel>(
+			WidgetTree->FindWidget(TEXT("CanvasPanel_MapViewport"))
+		);
+	}
+
+	if (CanvasPanel_MapViewport)
+	{
+		CanvasPanel_MapViewport->SetClipping(EWidgetClipping::ClipToBoundsAlways);
+		CanvasPanel_MapContent->SetClipping(EWidgetClipping::Inherit);
+		return;
+	}
+
+	UCanvasPanel* ParentCanvas = Cast<UCanvasPanel>(CanvasPanel_MapContent->GetParent());
+	UCanvasPanelSlot* OldContentSlot = Cast<UCanvasPanelSlot>(CanvasPanel_MapContent->Slot);
+	if (!ParentCanvas || !OldContentSlot)
+	{
+		return;
+	}
+
+	const int32 ContentIndex = ParentCanvas->GetChildIndex(CanvasPanel_MapContent);
+	if (ContentIndex == INDEX_NONE)
+	{
+		return;
+	}
+
+	const FAnchorData OldLayout = OldContentSlot->GetLayout();
+	const bool bOldAutoSize = OldContentSlot->GetAutoSize();
+	const int32 OldZOrder = OldContentSlot->GetZOrder();
+	TArray<UCanvasPanelSlot*> LaterSiblingSlotsAtSameZOrder;
+	for (int32 SiblingIndex = ContentIndex + 1;
+		SiblingIndex < ParentCanvas->GetChildrenCount();
+		++SiblingIndex)
+	{
+		UWidget* Sibling = ParentCanvas->GetChildAt(SiblingIndex);
+		UCanvasPanelSlot* SiblingSlot = Sibling
+			? Cast<UCanvasPanelSlot>(Sibling->Slot)
+			: nullptr;
+		if (SiblingSlot && SiblingSlot->GetZOrder() == OldZOrder)
+		{
+			LaterSiblingSlotsAtSameZOrder.Add(SiblingSlot);
+		}
+	}
+
+	if (!ParentCanvas->RemoveChild(CanvasPanel_MapContent))
+	{
+		return;
+	}
+
+	CanvasPanel_MapViewport = WidgetTree->ConstructWidget<UCanvasPanel>(
+		UCanvasPanel::StaticClass(),
+		TEXT("CanvasPanel_MapViewport")
+	);
+	CanvasPanel_MapViewport->SetClipping(EWidgetClipping::ClipToBoundsAlways);
+
+	UCanvasPanelSlot* ViewportSlot = ParentCanvas->AddChildToCanvas(CanvasPanel_MapViewport);
+	if (!ViewportSlot)
+	{
+		return;
+	}
+
+	ViewportSlot->SetLayout(OldLayout);
+	ViewportSlot->SetAutoSize(bOldAutoSize);
+	ViewportSlot->SetZOrder(OldZOrder);
+	for (UCanvasPanelSlot* LaterSiblingSlot : LaterSiblingSlotsAtSameZOrder)
+	{
+		LaterSiblingSlot->SetZOrder(OldZOrder + 1);
+	}
+
+	UCanvasPanelSlot* ContentSlot = CanvasPanel_MapViewport->AddChildToCanvas(
+		CanvasPanel_MapContent
+	);
+	ContentSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+	ContentSlot->SetOffsets(FMargin(0.f));
+	ContentSlot->SetAlignment(FVector2D::ZeroVector);
+	ContentSlot->SetAutoSize(false);
+	ContentSlot->SetZOrder(0);
+	CanvasPanel_MapContent->SetClipping(EWidgetClipping::Inherit);
+}
+
+void UECPannableMapWidget::EnsureMapNodeInfoInViewport()
+{
+	if (!CanvasPanel_MapViewport || !MapNodeInfoWidget)
+	{
+		return;
+	}
+
+	if (MapNodeInfoWidget->GetParent() == CanvasPanel_MapViewport)
+	{
+		if (UCanvasPanelSlot* InfoSlot = Cast<UCanvasPanelSlot>(MapNodeInfoWidget->Slot))
+		{
+			InfoSlot->SetZOrder(FMath::Max(1, InfoSlot->GetZOrder()));
+		}
+		return;
+	}
+
+	UPanelWidget* OldParent = MapNodeInfoWidget->GetParent();
+	if (!OldParent)
+	{
+		return;
+	}
+
+	FVector2D InfoSize = MapNodeInfoWidget->GetDesiredSize();
+	bool bAutoSize = true;
+	int32 InfoZOrder = 1;
+	if (const UCanvasPanelSlot* OldInfoSlot = Cast<UCanvasPanelSlot>(MapNodeInfoWidget->Slot))
+	{
+		InfoSize = OldInfoSlot->GetSize();
+		bAutoSize = OldInfoSlot->GetAutoSize();
+		InfoZOrder = FMath::Max(1, OldInfoSlot->GetZOrder());
+	}
+
+	if (!OldParent->RemoveChild(MapNodeInfoWidget))
+	{
+		return;
+	}
+
+	UCanvasPanelSlot* InfoSlot = CanvasPanel_MapViewport->AddChildToCanvas(MapNodeInfoWidget);
+	if (!InfoSlot)
+	{
+		return;
+	}
+
+	InfoSlot->SetAnchors(FAnchors(0.f, 0.5f));
+	InfoSlot->SetAlignment(FVector2D(0.f, 0.5f));
+	InfoSlot->SetPosition(FVector2D(MapNodeInfoSideMargin, 0.f));
+	InfoSlot->SetAutoSize(bAutoSize);
+	if (!bAutoSize && InfoSize.X > 0.f && InfoSize.Y > 0.f)
+	{
+		InfoSlot->SetSize(InfoSize);
+	}
+	InfoSlot->SetZOrder(InfoZOrder);
 }
 
 FReply UECPannableMapWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
@@ -98,8 +312,51 @@ void UECPannableMapWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
 	}
 }
 
+FReply UECPannableMapWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	if (InKeyEvent.GetKey() != EKeys::E)
+	{
+		return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+	}
+
+	if (!SelectedRegionTag.IsValid())
+	{
+		return FReply::Handled();
+	}
+
+	UECRegionSubsystem& RegionSubsystem = UECRegionSubsystem::Get(this);
+	if (!RegionSubsystem.RequestTravel(SelectedRegionTag))
+	{
+		UECSoundSubsystem::Get(this).PlaySFXByName(MapSoundRows::TravelFail);
+		return FReply::Handled();
+	}
+
+	UECSoundSubsystem::Get(this).PlaySFXByName(MapSoundRows::TravelSuccess);
+
+	if (APlayerController* PC = GetOwningPlayer())
+	{
+		UUIManagerSubsystem::Get(PC)->RequestToggleInput(ECGameplayTags::InputTag_UI_Map);
+	}
+	
+	ResetMapScale();
+
+	if (MapNodeInfoWidget)
+	{
+		MapNodeInfoWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	return FReply::Handled();
+}
+
 void UECPannableMapWidget::HandleMapNodeClicked(UECMapNodeWidget* MapNodeWidget)
 {
+	if (!IsValid(MapNodeWidget))
+	{
+		return;
+	}
+
+	SelectedRegionTag = MapNodeWidget->MyNodeTag;
+
 	FVector2D MapLocalPosition = GetMapNodeCenter(MapNodeWidget);
 
 	FocusMapAtLocalPosition(MapLocalPosition, TargetZoomInScale);
@@ -108,12 +365,20 @@ void UECPannableMapWidget::HandleMapNodeClicked(UECMapNodeWidget* MapNodeWidget)
 
 void UECPannableMapWidget::FocusMapAtLocalPosition(const FVector2D& MapLocalPosition, float TargetScale)
 {
-	if (!CanvasPanel_Root || !CanvasPanel_MapContent)
+	if (!CanvasPanel_MapContent)
 	{
 		return;
 	}
 
-	const FVector2D ViewSize = CanvasPanel_Root->GetCachedGeometry().GetLocalSize();
+	const UCanvasPanel* MapViewport = CanvasPanel_MapViewport
+		? CanvasPanel_MapViewport.Get()
+		: CanvasPanel_Root.Get();
+	if (!MapViewport)
+	{
+		return;
+	}
+
+	const FVector2D ViewSize = MapViewport->GetCachedGeometry().GetLocalSize();
 	const FVector2D MapSize = CanvasPanel_MapContent->GetCachedGeometry().GetLocalSize();
 	
 	if (MapSize.X <= KINDA_SMALL_NUMBER || MapSize.Y <= KINDA_SMALL_NUMBER)
@@ -142,21 +407,16 @@ FVector2D UECPannableMapWidget::GetMapNodeCenter(const UECMapNodeWidget* MapNode
 		return FVector2D::ZeroVector;
 	}
 
-	const UCanvasPanelSlot* NodeSlot = Cast<UCanvasPanelSlot>(MapNodeWidget->Slot);
-	if (!NodeSlot)
-	{
-		return FVector2D::ZeroVector;
-	}
+	const FGeometry& MapGeometry =
+		CanvasPanel_MapContent->GetCachedGeometry();
+	const FGeometry& NodeGeometry =
+		MapNodeWidget->GetCachedGeometry();
 
-	const FVector2D MapSize = CanvasPanel_MapContent->GetCachedGeometry().GetLocalSize();
-	const FAnchors Anchors = NodeSlot->GetAnchors();
+	const FVector2D NodeCenterAbsolute =
+		NodeGeometry.LocalToAbsolute(
+			NodeGeometry.GetLocalSize() * 0.5f);
 
-	// 맵 노드는 Stretch가 아닌 단일 Anchor 사용을 전제로 합니다.
-	const FVector2D AnchorPosition(MapSize.X * Anchors.Minimum.X,MapSize.Y * Anchors.Minimum.Y);
-	const FVector2D NodeSize = MapNodeWidget->GetCachedGeometry().GetLocalSize();
-	const FVector2D Alignment =	NodeSlot->GetAlignment();
-	
-	return AnchorPosition + NodeSlot->GetPosition() + (FVector2D(0.5f, 0.5f) - Alignment) * NodeSize;
+	return MapGeometry.AbsoluteToLocal(NodeCenterAbsolute);
 }
 
 void UECPannableMapWidget::StartMapTransformAnimation(const FWidgetTransform& TargetTransform)
@@ -174,12 +434,20 @@ void UECPannableMapWidget::StartMapTransformAnimation(const FWidgetTransform& Ta
 
 FWidgetTransform UECPannableMapWidget::GetClampedMapTransform(FWidgetTransform Transform) const
 {
-	if (!CanvasPanel_Root || !CanvasPanel_MapContent)
+	if (!CanvasPanel_MapContent)
 	{
 		return Transform;
 	}
 
-	const FVector2D CanvasSize = CanvasPanel_Root->GetCachedGeometry().GetLocalSize();
+	const UCanvasPanel* MapViewport = CanvasPanel_MapViewport
+		? CanvasPanel_MapViewport.Get()
+		: CanvasPanel_Root.Get();
+	if (!MapViewport)
+	{
+		return Transform;
+	}
+
+	const FVector2D CanvasSize = MapViewport->GetCachedGeometry().GetLocalSize();
 	const FVector2D MapSize = CanvasPanel_MapContent->GetCachedGeometry().GetLocalSize();
 
 	const float ScaledWidth = MapSize.X * Transform.Scale.X;
@@ -215,13 +483,37 @@ void UECPannableMapWidget::ShowMapNodeInfo(UECMapNodeWidget* MapNodeWidget, cons
 		return;
 	}
 
-	const FVector2D MapSize = CanvasPanel_MapContent->GetCachedGeometry().GetLocalSize();
-	// 오른쪽 노드를 눌렀다면 정보창은 왼쪽에 표시합니다.
-	const bool bShowOnLeft = MapLocalPosition.X > MapSize.X * 0.5f;
+	bool bShowOnLeft = false;
+	if (CanvasPanel_MapViewport)
+	{
+		const FGeometry& NodeGeometry = MapNodeWidget->GetCachedGeometry();
+		const FVector2D NodeCenterAbsolute = NodeGeometry.LocalToAbsolute(
+			NodeGeometry.GetLocalSize() * 0.5f
+		);
+		const FGeometry& ViewportGeometry = CanvasPanel_MapViewport->GetCachedGeometry();
+		const FVector2D NodeCenterInViewport = ViewportGeometry.AbsoluteToLocal(
+			NodeCenterAbsolute
+		);
+		bShowOnLeft = NodeCenterInViewport.X > ViewportGeometry.GetLocalSize().X * 0.5f;
+	}
+	else
+	{
+		const FVector2D MapSize = CanvasPanel_MapContent->GetCachedGeometry().GetLocalSize();
+		bShowOnLeft = MapLocalPosition.X > MapSize.X * 0.5f;
+	}
+
+	// Viewport 오른쪽에 보이는 노드를 눌렀다면 정보창은 왼쪽에 표시합니다.
 
 	SetMapNodeInfoSide(bShowOnLeft);
-	// @TODO: 맵 지역의 이름 데이터 변경하기
-	MapNodeInfoWidget->SetMapName(FText::FromName(MapNodeWidget->MyNodeTag.GetTagName()));
+
+	const FECRegionTableRow* RegionDefinition =
+		UECRegionSubsystem::Get(this).FindRegionDefinition(MapNodeWidget->MyNodeTag);
+	if (RegionDefinition)
+	{
+		MapNodeInfoWidget->SetMapNodeInfoImage(RegionDefinition->RegionInfoImage);
+		MapNodeInfoWidget->SetRegionImage(RegionDefinition->RegionImage);
+	}
+
 	MapNodeInfoWidget->SetVisibility(ESlateVisibility::Visible);
 }
 

@@ -1,0 +1,18 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "Empty City Animation Tools",
+	"Description": "Editor-only animation processing tools for Empty City.",
+	"Category": "Animation",
+	"CreatedBy": "Empty City",
+	"CanContainContent": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "EmptyCityAnimationTools",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default"
+		}
+	]
+}

@@ -34,6 +34,9 @@ protected:
 		meta=(EditCondition="bApplyKnockback", ClampMin="0.0", Units="cm/s"))
 	float KnockbackSpeed = 650.0f;
 
+	/** 파생 Melee Ability도 기존 패링 취소 처리를 재사용할 수 있도록 합니다. */
+	virtual void OnMontageCancelled() override;
+
 private:
 	bool bIsParried = false;
 
@@ -44,5 +47,4 @@ private:
 	/** 피격자에게 넉백 반응 GameplayEvent를 전달합니다. */
 	void SendKnockbackEvent(AActor* TargetActor, const FHitResult& HitResult) const;
 
-	virtual void OnMontageCancelled() override;
 };

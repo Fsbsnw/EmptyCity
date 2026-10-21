@@ -8,6 +8,9 @@ class UECInventoryItemInstance;
 class UECEquipmentInstance;
 class UECEquipmentManagerComponent;
 
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnQuickBarSlotChanged, int32, UECInventoryItemInstance*);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnQuickBarSlotUsed, int32);
+
 /**
  * HUD QuickBar와 Inventory/Equipment 시스템을 연결하는 ControllerComponent입니다.
  *
@@ -50,11 +53,17 @@ public:
 	 */
 	void UseSlot(int32 SlotIndex);
 
+	/** 소비 아이템 사용이 실제로 성공했을 때 마지막 사용 슬롯을 갱신합니다. */
+	void NotifySlotUsed(int32 SlotIndex);
+
 	/** 전체 슬롯 배열의 복사본을 반환합니다. (HUD 갱신 등에서 슬롯 구성을 조회할 때 사용) */
 	TArray<UECInventoryItemInstance*> GetSlots() const { return Slots; }
 
 	/** 현재 활성화된 슬롯 인덱스를 반환합니다. (-1이면 선택 없음) */
 	int32 GetActiveSlotIndex() const { return ActiveSlotIndex; }
+
+	/** 가장 최근 사용에 성공한 소비 아이템 슬롯입니다. (-1이면 아직 사용한 슬롯 없음) */
+	int32 GetLastUsedSlotIndex() const { return LastUsedSlotIndex; }
 
 	/** 현재 활성 슬롯에 등록된 InventoryItemInstance를 반환합니다. (활성 슬롯이 없거나 비어 있으면 nullptr) */
 	UECInventoryItemInstance* GetActiveSlotItem() const;
@@ -100,4 +109,16 @@ private:
 	UPROPERTY()
 	TObjectPtr<UECEquipmentInstance> EquippedItem;
 
+	/** 마지막으로 실제 사용에 성공한 소비 아이템 슬롯입니다. */
+	int32 LastUsedSlotIndex = -1;
+
+// ─────────────────────────────────────────────────────────────
+// Delegates
+// ─────────────────────────────────────────────────────────────
+public:
+	/** 슬롯의 아이템 정보가 변경될 때 호출하는 델리게이트입니다. */
+	FOnQuickBarSlotChanged OnQuickBarSlotChanged;
+
+	/** 소비 아이템 사용이 성공해 강조 슬롯이 변경될 때 호출합니다. */
+	FOnQuickBarSlotUsed OnQuickBarSlotUsed;
 };

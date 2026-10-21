@@ -7,6 +7,7 @@
 #include "ECFarmingResourceActor.generated.h"
 
 class UECItemDropComponent;
+class USceneComponent;
 class UStaticMeshComponent;
 
 /** DT_Farming의 한 행으로 상호작용과 아이템 드롭을 구성하는 파밍 대상입니다. */
@@ -46,6 +47,11 @@ public:
 // Components
 // ─────────────────────────────────────────────────────────────
 protected:
+	/** 액터 위치와 상호작용 인디케이터의 기준점입니다. 스케일은 1로 유지합니다. */
+	UPROPERTY(VisibleAnywhere, Category = "변수|컴포넌트")
+	TObjectPtr<USceneComponent> SceneRoot;
+
+	/** 실제 외형과 상호작용 충돌입니다. SceneRoot 기준으로 스케일과 위치를 조절합니다. */
 	UPROPERTY(VisibleAnywhere, Category = "변수|컴포넌트")
 	TObjectPtr<UStaticMeshComponent> Mesh;
 

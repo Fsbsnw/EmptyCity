@@ -42,5 +42,11 @@ protected:
 	void OnStunTagChanged(const FGameplayTag Tag, int32 NewCount);
 
 	/** 사망 상태가 변화할 때 실행되는 함수입니다. */
-	void OnDeathTagChanged(const FGameplayTag Tag, int32 NewCount);	
+	void OnDeathTagChanged(const FGameplayTag Tag, int32 NewCount);
+
+private:
+	/** Sequencer처럼 CharacterMovement를 거치지 않고 이동할 때 속도를 계산하기 위한 이전 위치입니다. */
+	FVector PreviousOwnerLocation = FVector::ZeroVector;
+
+	bool bHasPreviousOwnerLocation = false;
 };

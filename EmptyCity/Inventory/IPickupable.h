@@ -17,6 +17,16 @@ class UECInventoryManagerComponent;
 class UObject;
 struct FFrame;
 
+/** 월드 아이템을 인벤토리에 옮긴 결과입니다. */
+UENUM(BlueprintType)
+enum class EECPickupResult : uint8
+{
+	Failed,
+	FailedWeightLimit,
+	Partial,
+	Complete
+};
+
 /**
  * 아직 월드에 인스턴스화되지 않은 "아이템 설계도 + 개수" 묶음입니다.
  * 줍는 순간 인벤토리에서 이 정보로 새 아이템 인스턴스를 생성합니다. (예: "포션 설계도 3개")
@@ -85,6 +95,10 @@ public:
 	/** 이 대상이 인벤토리에 넘겨줄 내용물(설계도/인스턴스 묶음)을 반환합니다. */
 	UFUNCTION(BlueprintCallable)
 	virtual FInventoryPickup GetPickupInventory() const = 0;
+
+	/** 부분 획득 후 월드에 남겨 둘 내용물로 갱신합니다. */
+	UFUNCTION(BlueprintCallable)
+	virtual void SetPickupInventory(const FInventoryPickup& InPickupInventory) = 0;
 };
 
 /**
@@ -104,7 +118,9 @@ public:
 	UFUNCTION(BlueprintPure)
 	static TScriptInterface<IPickupable> GetFirstPickupableFromActor(AActor* Actor);
 
-	/** Pickup 대상의 내용물을 인벤토리 컴포넌트에 추가합니다. 서버 권한에서만 동작합니다. */
+	/** 가능한 최대 수량을 인벤토리에 추가하고 남은 수량은 Pickup 대상에 보존합니다. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, meta = (WorldContext = "Ability"))
-	static bool AddPickupToInventory(UECInventoryManagerComponent* InventoryComponent, TScriptInterface<IPickupable> Pickup);
+	static EECPickupResult AddPickupToInventory(
+		UECInventoryManagerComponent* InventoryComponent,
+		TScriptInterface<IPickupable> Pickup);
 };

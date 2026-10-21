@@ -41,7 +41,8 @@ void UECGameplayAbility_PlayerAttack::ActivateAbility(const FGameplayAbilitySpec
 	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 			this,
 			NAME_None,
-			AttackDefinition->AttackMontage);
+			AttackDefinition->AttackMontage,
+			WeaponInstance->GetEffectiveAttackSpeedMultiplier());
 
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::K2_EndAbility);
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::K2_EndAbility);

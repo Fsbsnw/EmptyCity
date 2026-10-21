@@ -6,9 +6,17 @@
 #include "InputActionValue.h"
 #include "InputMappingContext.h"
 #include "AbilitySystem/Ability/Player/ECGameplayAbility_Sprint.h"
+#include "AbilitySystem/ECAbilitySystemComponent.h"
 #include "AbilitySystem/Attribute/ECHealthSet.h"
+#include "AbilitySystem/Attribute/ECMoveSpeedSet.h"
 #include "Camera/ECCameraComponent.h"
+#include "Character/Player/Component/ECFootstepComponent.h"
 #include "Character/Player/State/ECPlayerState.h"
+#include "Component/Attribute/ECHealthComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "Controller/ECPlayerController.h"
 #include "Equipment/ECEquipmentDefinition.h"
 #include "Equipment/ECEquipmentInstance.h"
@@ -20,6 +28,12 @@
 #include "Inventory/ECInventoryItemInstance.h"
 #include "Inventory/ECInventoryManagerComponent.h"
 #include "Inventory/Fragment/InventoryFragment_EquippableItem.h"
+#include "Subsystem/ECItemDataSubsystem.h"
+#include "Subsystem/ECGameplayMessageSubsystem.h"
+#include "Subsystem/ECMessageTypes.h"
+#include "TimerManager.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogECPlayer, Log, All);
 
 AECPlayer::AECPlayer(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
@@ -35,7 +49,7 @@ AECPlayer::AECPlayer(const FObjectInitializer& ObjectInitializer) : Super(Object
 
 	// 공격 Ability가 활성화된 동안 플레이어 이동 입력을 차단합니다.
 	MovementBlockingTags.Add(ECGameplayTags::Status_Attacking.GetTag());
-	
+
 	// 1인칭 카메라를 생성합니다.
 	{
 		CameraComponent = CreateDefaultSubobject<UECCameraComponent>(TEXT("CameraComponent"));
@@ -53,10 +67,25 @@ AECPlayer::AECPlayer(const FObjectInitializer& ObjectInitializer) : Super(Object
 		FirstPersonMesh->SetCastHiddenShadow(false);
 	}
 
+	// 도끼/곡괭이는 파밍 중에만 1인칭 Mesh 소켓에 표시합니다.
+	{
+		FarmingToolMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FarmingToolMeshComponent"));
+		FarmingToolMeshComponent->SetupAttachment(FirstPersonMesh);
+		FarmingToolMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		FarmingToolMeshComponent->SetGenerateOverlapEvents(false);
+		FarmingToolMeshComponent->SetOnlyOwnerSee(true);
+		FarmingToolMeshComponent->SetCastShadow(false);
+		FarmingToolMeshComponent->SetVisibility(false);
+		FarmingToolMeshComponent->SetHiddenInGame(true);
+	}
+
 	// EquipmentManager를 초기화합니다.
 	{
 		EquipmentManagerComponent = CreateDefaultSubobject<UECEquipmentManagerComponent>(TEXT("EquipmentManagerComponent"));
 	}
+
+	// 이동 거리와 발밑 표면에 따라 발소리를 재생하는 컴포넌트를 생성합니다.
+	FootstepComponent = CreateDefaultSubobject<UECFootstepComponent>(TEXT("FootstepComponent"));
 }
 
 void AECPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -128,13 +157,56 @@ void AECPlayer::PossessedBy(AController* NewController)
 	// 반드시 먼저 ActorInfo를 초기화한다.
 	ASC->InitAbilityActorInfo(PS, this);
 
+	// 플레이어도 HealthSet의 체력 0 이벤트가 Death GameplayEvent로 이어지도록 연결합니다.
+	HealthComponent->InitializeWithAbilitySystem(ASC);
+
 	// 그다음 GAS 몽타주 대상 메시를 지정한다.
 	ASC->AbilityActorInfo->SkeletalMeshComponent = FirstPersonMesh;
+
+	// MoveSpeed Attribute 변경을 실제 이동 속도에 반영하고 현재 값으로 초기화합니다.
+	const UECMoveSpeedSet* MoveSpeedSet = ASC->GetSet<UECMoveSpeedSet>();
+	ASC->GetGameplayAttributeValueChangeDelegate(MoveSpeedSet->GetMoveSpeedAttribute()).AddUObject(this, &ThisClass::OnMoveSpeedChanged);
+	GetCharacterMovement()->MaxWalkSpeed = MoveSpeedSet->GetMoveSpeed();
+}
+
+void AECPlayer::OnMoveSpeedChanged(const FOnAttributeChangeData& Data)
+{
+	// 달리기 중에는 SprintSpeed가 우선하며, 종료 시 최신 MoveSpeed가 반영됩니다.
+	if (!ASC->HasMatchingGameplayTag(ECGameplayTags::Status_Sprinting))
+	{
+		GetCharacterMovement()->MaxWalkSpeed = Data.NewValue;
+	}
 }
 
 void AECPlayer::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (USkeletalMeshComponent* ThirdPersonMesh = GetMesh())
+	{
+		InitialMeshRelativeTransform = ThirdPersonMesh->GetRelativeTransform();
+		InitialMeshCollisionProfileName = ThirdPersonMesh->GetCollisionProfileName();
+		InitialMeshCollisionEnabled = ThirdPersonMesh->GetCollisionEnabled();
+		bInitialMeshGravityEnabled = ThirdPersonMesh->IsGravityEnabled();
+	}
+
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		InitialCapsuleCollisionProfileName = Capsule->GetCollisionProfileName();
+		InitialCapsuleCollisionEnabled = Capsule->GetCollisionEnabled();
+	}
+
+	if (CameraComponent)
+	{
+		InitialCameraRelativeTransform = CameraComponent->GetRelativeTransform();
+	}
+
+	if (FirstPersonMesh)
+	{
+		InitialFirstPersonCollisionEnabled = FirstPersonMesh->GetCollisionEnabled();
+	}
+
+	bDeathRecoveryStateCached = true;
 	
 	InventoryManagerComponent = GetController()->FindComponentByClass<UECInventoryManagerComponent>();
 	QuickBarComponent = GetController()->FindComponentByClass<UECQuickBarComponent>();
@@ -149,6 +221,182 @@ bool AECPlayer::CanJumpInternal_Implementation() const
 	return JumpIsAllowedInternal();
 }
 
+void AECPlayer::StartDeathProcess()
+{
+	Super::StartDeathProcess();
+
+	USkeletalMeshComponent* RagdollMesh = GetMesh();
+	if (!IsValid(RagdollMesh) || !RagdollMesh->GetPhysicsAsset())
+	{
+		UE_LOG(LogECPlayer, Warning, TEXT("플레이어 사망 래그돌을 실행할 Physics Asset이 없습니다."));
+		return;
+	}
+
+	// 공중 사망을 포함해 래그돌보다 먼저 캡슐과 캐릭터 이동을 끕니다.
+	DisableMovementAndCollision();
+
+	// 1인칭 팔과 파밍 도구는 숨기고 본체 Mesh만 래그돌로 사용합니다.
+	if (FirstPersonMesh)
+	{
+		FirstPersonMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		FirstPersonMesh->SetHiddenInGame(true, true);
+	}
+
+	// 현재 시야 위치를 유지한 채 머리 본에 붙여 갑작스러운 카메라 점프를 방지합니다.
+	if (CameraComponent && RagdollMesh->DoesSocketExist(DeathCameraSocketName))
+	{
+		CameraComponent->bUsePawnControlRotation = false;
+		CameraComponent->AttachToComponent(
+			RagdollMesh,
+			FAttachmentTransformRules::KeepWorldTransform,
+			DeathCameraSocketName);
+	}
+	else
+	{
+		UE_LOG(LogECPlayer, Warning,
+			TEXT("플레이어 사망 카메라 본/소켓을 찾지 못했습니다: %s"),
+			*DeathCameraSocketName.ToString());
+	}
+
+	RagdollMesh->SetCollisionProfileName(TEXT("Ragdoll"));
+	RagdollMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	RagdollMesh->SetEnableGravity(true);
+	RagdollMesh->SetAllBodiesBelowSimulatePhysics(
+		DeathRagdollRootBoneName,
+		true,
+		true);
+	RagdollMesh->SetAllBodiesBelowPhysicsBlendWeight(
+		DeathRagdollRootBoneName,
+		1.0f,
+		false,
+		true);
+	RagdollMesh->WakeAllRigidBodies();
+	RagdollMesh->SetAllPhysicsAngularVelocityInDegrees(FVector::ZeroVector, false);
+	RagdollMesh->SetAllPhysicsLinearVelocity(FVector::ZeroVector, false);
+
+	GetWorldTimerManager().SetTimer(
+		DeathRagdollTimerHandle,
+		this,
+		&ThisClass::FinishDeathRagdoll,
+		DeathRagdollDuration,
+		false);
+}
+
+void AECPlayer::FinishDeathRagdoll()
+{
+	if (CameraComponent)
+	{
+		CameraComponent->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+	}
+
+	if (USkeletalMeshComponent* RagdollMesh = GetMesh(); IsValid(RagdollMesh))
+	{
+		RagdollMesh->PutAllRigidBodiesToSleep();
+	}
+}
+
+void AECPlayer::RecoverFromDeath()
+{
+	GetWorldTimerManager().ClearTimer(DeathRagdollTimerHandle);
+
+	if (USkeletalMeshComponent* RagdollMesh = GetMesh(); IsValid(RagdollMesh))
+	{
+		RagdollMesh->SetAllBodiesSimulatePhysics(false);
+		RagdollMesh->SetAllBodiesPhysicsBlendWeight(0.0f, false);
+		RagdollMesh->PutAllRigidBodiesToSleep();
+
+		if (bDeathRecoveryStateCached)
+		{
+			RagdollMesh->SetCollisionProfileName(InitialMeshCollisionProfileName);
+			RagdollMesh->SetCollisionEnabled(InitialMeshCollisionEnabled);
+			RagdollMesh->SetEnableGravity(bInitialMeshGravityEnabled);
+			RagdollMesh->SetRelativeTransform(InitialMeshRelativeTransform);
+		}
+		RagdollMesh->SetHiddenInGame(false, true);
+	}
+
+	if (CameraComponent)
+	{
+		CameraComponent->AttachToComponent(
+			RootComponent,
+			FAttachmentTransformRules::KeepRelativeTransform);
+		if (bDeathRecoveryStateCached)
+		{
+			CameraComponent->SetRelativeTransform(InitialCameraRelativeTransform);
+		}
+		CameraComponent->bUsePawnControlRotation = true;
+	}
+
+	if (FirstPersonMesh)
+	{
+		FirstPersonMesh->SetCollisionEnabled(InitialFirstPersonCollisionEnabled);
+		FirstPersonMesh->SetHiddenInGame(false, true);
+	}
+
+	SetFirstPersonFarmingToolActive(false);
+
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		if (bDeathRecoveryStateCached)
+		{
+			Capsule->SetCollisionProfileName(InitialCapsuleCollisionProfileName);
+			Capsule->SetCollisionEnabled(InitialCapsuleCollisionEnabled);
+		}
+	}
+
+	SetActorHiddenInGame(false);
+
+	if (UCharacterMovementComponent* MoveComponent = GetCharacterMovement())
+	{
+		MoveComponent->StopMovementImmediately();
+		MoveComponent->SetMovementMode(MOVE_Walking);
+	}
+
+	if (HealthComponent)
+	{
+		HealthComponent->ResetDeath();
+	}
+
+	if (ASC)
+	{
+		ASC->ReactivateOnSpawnAbilities();
+	}
+}
+
+void AECPlayer::SetFirstPersonFarmingToolActive(bool bActive, EECWorkbenchUpgradeType ToolType)
+{
+	if (!IsValid(FirstPersonMesh) || !IsValid(FarmingToolMeshComponent))
+	{
+		return;
+	}
+
+	if (!bActive)
+	{
+		FarmingToolMeshComponent->SetVisibility(false);
+		FarmingToolMeshComponent->SetHiddenInGame(true);
+		FarmingToolMeshComponent->SetStaticMesh(nullptr);
+		return;
+	}
+
+	const FECItemTableRow* ToolData = UECItemDataSubsystem::Get(this).FindFarmingToolData(ToolType);
+	if (!ToolData || ToolData->WorldMesh.IsNull() || ToolData->FarmingAttachSocket.IsNone())
+	{
+		UE_LOG(LogECPlayer, Warning,
+			TEXT("1인칭 파밍 도구 데이터가 불완전합니다. ToolType=%d, DT_Item의 WorldMesh/FarmingAttachSocket을 확인하세요."),
+			static_cast<uint8>(ToolType));
+		return;
+	}
+
+	FarmingToolMeshComponent->SetStaticMesh(ToolData->WorldMesh.LoadSynchronous());
+	FarmingToolMeshComponent->AttachToComponent(
+		FirstPersonMesh,
+		FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+		ToolData->FarmingAttachSocket);
+	FarmingToolMeshComponent->SetRelativeTransform(ToolData->FarmingAttachTransform);
+	FarmingToolMeshComponent->SetHiddenInGame(false);
+	FarmingToolMeshComponent->SetVisibility(true);
+}
+
 void AECPlayer::AddInitialInventory()
 {
 	if (InitialInventoryItems.IsEmpty()) return;
@@ -161,7 +409,10 @@ void AECPlayer::AddInitialInventory()
 
 		// 인벤토리에 아이템을 지급한다.
 		// @TODO: Inventory UI 구현시 ItemInstance를 UI에 추가할 것
-		UECInventoryItemInstance* ItemInstance = InventoryManagerComponent->AddItemDefinition(InitialItem.ItemDef, InitialItem.StackCount);
+		UECInventoryItemInstance* ItemInstance = InventoryManagerComponent->AddItemDefinition(
+			InitialItem.ItemDef,
+			InitialItem.StackCount,
+			false);
 
 		// QuickBar 등록이 켜져 있으면 지정 슬롯에도 등록한다.
 		if (ItemInstance && InitialItem.bAddToQuickBar)
@@ -175,17 +426,16 @@ void AECPlayer::EquipWeapon()
 {
 	if (!DefaultWeapon) return;
 	
-	if (UECInventoryItemInstance* WeaponInstance = InventoryManagerComponent->AddItemDefinition(DefaultWeapon, 1))
+	if (UECInventoryItemInstance* WeaponInstance = InventoryManagerComponent->AddItemDefinition(
+		DefaultWeapon,
+		1,
+		false))
 	{
 		if (const UInventoryFragment_EquippableItem* EquipInfo = WeaponInstance->FindFragmentByClass<UInventoryFragment_EquippableItem>())
 		{
 			if (TSubclassOf<UECEquipmentDefinition> EquipDef = EquipInfo->EquipmentDefinition)
 			{
-				if (UECEquipmentInstance* EquippedWeapon = EquipmentManagerComponent->EquipItem(EquipInfo->EquipmentDefinition))
-				{
-					// GetWeaponData()가 원본 InventoryItem을 역추적할 수 있게 합니다.
-					EquippedWeapon->Instigator = WeaponInstance;
-				}
+				EquipmentManagerComponent->EquipItem(EquipInfo->EquipmentDefinition, WeaponInstance);
 			}
 		}	
 	}
@@ -215,6 +465,16 @@ void AECPlayer::Input_Move(const FInputActionValue& InputActionValue)
 	if (Controller)
 	{
 		const FVector2D Value = InputActionValue.Get<FVector2D>();
+		if (!Value.IsNearlyZero())
+		{
+			FECTutorialInputMessage TutorialMessage;
+			TutorialMessage.PlayerController = Cast<APlayerController>(Controller);
+			TutorialMessage.InputTag = ECGameplayTags::InputTag_Move;
+			UECGameplayMessageSubsystem::Get(this).BroadcastMessage(
+				TAG_Message_Tutorial_Input,
+				TutorialMessage);
+		}
+
 		const FRotator MovementRotation(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
 
 		if (Value.X != 0.0f)
@@ -271,6 +531,13 @@ void AECPlayer::Input_UseQuickSlot(const FInputActionValue& InputActionValue, in
 
 void AECPlayer::Input_AbilityInputTagPressed(FGameplayTag InputTag)
 {
+	FECTutorialInputMessage TutorialMessage;
+	TutorialMessage.PlayerController = Cast<APlayerController>(Controller);
+	TutorialMessage.InputTag = InputTag;
+	UECGameplayMessageSubsystem::Get(this).BroadcastMessage(
+		TAG_Message_Tutorial_Input,
+		TutorialMessage);
+
 	ASC->AbilityInputTagPressed(InputTag);
 }
 

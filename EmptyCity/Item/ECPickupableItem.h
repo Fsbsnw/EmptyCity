@@ -22,7 +22,7 @@ class UECInventoryItemDefinition;
  * [감지되는 원리]
  * Mesh의 콜리전이 상호작용 채널(EC_TraceChannel_Interaction)에 응답해야
  * 주변 탐색(Overlap)과 정면 조준(LineTrace) 양쪽에서 상호작용 대상으로 잡힙니다.
- * 이를 위해 프로젝트에 정의된 "Interactable_BlockDynamic" 콜리전 프로파일을 사용합니다.
+ * 이를 위해 월드와 다른 드랍 아이템을 막지 않는 "Interactable_OverlapDynamic" 콜리전 프로파일을 사용합니다.
  */
 UCLASS()
 class EMPTYCITY_API AECPickupableItem : public AActor, public IInteractableTarget, public IPickupable
@@ -32,13 +32,14 @@ class EMPTYCITY_API AECPickupableItem : public AActor, public IInteractableTarge
 public:
 	AECPickupableItem();
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 // ─────────────────────────────────────────────────────────────
 // Initialize
 // ─────────────────────────────────────────────────────────────
 public:
 	/** 런타임에 생성된 픽업 액터의 내용물을 지정하고 월드 외형을 적용합니다. */
-	void SetPickupInventory(const FInventoryPickup& InPickupInventory);
+	virtual void SetPickupInventory(const FInventoryPickup& InPickupInventory) override;
 
 // ─────────────────────────────────────────────────────────────
 // Interface
@@ -57,6 +58,9 @@ public:
 private:
 	/** StaticInventory의 첫 번째 아이템 Definition에서 WorldVisual Fragment를 찾아 Mesh에 적용합니다. */
 	void ApplyWorldVisual();
+
+	UFUNCTION()
+	void OnRep_StaticInventory();
 
 
 
@@ -78,7 +82,7 @@ protected:
 	FInteractionOption Option;
 
 	/** 이 아이템을 주웠을 때 인벤토리에 들어갈 내용물입니다. (설계도/인스턴스 묶음) */
-	UPROPERTY(EditDefaultsOnly, Category = "변수")
+	UPROPERTY(EditDefaultsOnly, ReplicatedUsing = OnRep_StaticInventory, Category = "변수")
 	FInventoryPickup StaticInventory;
 
 };

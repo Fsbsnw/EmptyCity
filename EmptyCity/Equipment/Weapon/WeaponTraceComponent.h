@@ -112,6 +112,12 @@ private:
 public:
 	void SetOwningWeaponInstance(UECWeaponInstance* InWeaponInstance);
 
+	/** 런타임 외형 교체 후 공격 판정에 사용할 메시를 명시적으로 갱신합니다. */
+	void SetTraceMesh(UMeshComponent* InTraceMesh);
+
+	/** 현재 공격 판정에 사용 중인 메시를 반환합니다. */
+	UMeshComponent* GetTraceMesh() const { return TraceMesh.Get(); }
+
 	/** 적중 대상에게 현재 무기의 데미지 GameplayEffect를 적용합니다. */
 	void ApplyDamageToHitTarget(const FHitResult& HitResult);
 

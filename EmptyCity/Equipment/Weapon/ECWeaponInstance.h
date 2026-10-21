@@ -7,7 +7,10 @@
 #include "ECWeaponInstance.generated.h"
 
 struct FECWeaponTableRow;
+enum class EECWorkbenchUpgradeType : uint8;
 class UAnimMontage;
+class UECWeaponDefinition;
+class UStaticMeshComponent;
 
 
 /**
@@ -40,6 +43,15 @@ public:
 	/** 현재 무기에 연결된 데이터 테이블 행을 반환합니다. */
 	const FECWeaponTableRow* GetWeaponData() const;
 
+	/** 작업대 무기 강화 단계를 반영한 실제 공격력입니다. */
+	float GetEffectiveAttackPower() const;
+
+	/** 작업대 무기 강화 단계를 반영한 공격 몽타주 재생 배율입니다. */
+	float GetEffectiveAttackSpeedMultiplier() const;
+
+	/** 현재 강화 단계 무기 메시의 중앙 소켓 위치를 반환합니다. 소켓이 없으면 메시 Bounds 중앙을 사용합니다. */
+	bool GetParryImpactTransform(FTransform& OutTransform) const;
+
 
 // ─────────────────────────────────────────────────────────────
 // Attack
@@ -59,6 +71,12 @@ public:
 
 private:
 	void FindWeaponTraceComponent();
+	const UECWeaponDefinition* GetWeaponDefinition() const;
+	void BindWeaponUpgradeEvents();
+	void UnbindWeaponUpgradeEvents();
+	void RefreshWeaponVisual();
+	UStaticMeshComponent* FindOrCreateWeaponVisualMesh();
+	void HandleWorkbenchUpgradeLevelChanged(EECWorkbenchUpgradeType UpgradeType, int32 NewLevel);
 
 
 // ─────────────────────────────────────────────────────────────
@@ -101,5 +119,9 @@ public:
 	/** 스폰된 무기 Actor가 소유하는 공격 판정 컴포넌트입니다. */
 	UPROPERTY(Transient)
 	TWeakObjectPtr<UWeaponTraceComponent> WeaponTraceComponent;
+
+	/** 기존 BP_Bat 외형을 대체해 강화 단계별 Static Mesh를 표시하는 런타임 컴포넌트입니다. */
+	UPROPERTY(Transient)
+	TWeakObjectPtr<UStaticMeshComponent> WeaponVisualMeshComponent;
 
 };

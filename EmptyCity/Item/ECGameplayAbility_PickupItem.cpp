@@ -3,6 +3,14 @@
 #include "ECLogChannels.h"
 #include "Character/Player/Controller/ECPlayerController.h"
 #include "Inventory/ECInventoryManagerComponent.h"
+#include "Subsystem/ECGameplayMessageSubsystem.h"
+#include "Subsystem/ECMessageTypes.h"
+#include "Subsystem/ECSoundSubsystem.h"
+
+namespace PickupSoundRows
+{
+	const FName WeightLimitFailure(TEXT("SFX_Item_Pickup_Fail_WeightLimit"));
+}
 
 UECGameplayAbility_PickupItem::UECGameplayAbility_PickupItem()
 {
@@ -21,16 +29,40 @@ void UECGameplayAbility_PickupItem::ActivateAbility(const FGameplayAbilitySpecHa
 	AActor* TargetActor = const_cast<AActor*>(ToRawPtr(TriggerEventData->Target));                                                                                                                                                       
 	Pickupable = UPickupableStatics::GetFirstPickupableFromActor(TargetActor);
 	
-	const bool bPickupSucceeded = PickUp();
-	if (bPickupSucceeded) TargetActor->Destroy();
+	const EECPickupResult PickupResult = PickUp();
+	if (PickupResult == EECPickupResult::Complete)
+	{
+		TargetActor->Destroy();
+	}
+	else if (PickupResult == EECPickupResult::FailedWeightLimit)
+	{
+		UECSoundSubsystem::Get(this).PlaySFXByName(PickupSoundRows::WeightLimitFailure);
+
+		FECNotificationMessage Notification;
+		if (const APlayerController* PlayerController = GetECPlayerControllerFromActorInfo())
+		{
+			Notification.TargetPlayer = PlayerController->PlayerState;
+		}
+		Notification.TargetChannel = TAG_Notification_Warning_InventoryWeightLimit;
+		Notification.PayloadTag = TAG_Notification_Warning_InventoryWeightLimit;
+		Notification.PayloadMessage = NSLOCTEXT(
+			"Notification",
+			"InventoryWeightLimit",
+			"가방 무게가 가득 찼습니다.");
+		UECGameplayMessageSubsystem::Get(this).BroadcastMessage(
+			TAG_AddNotification_Message,
+			Notification);
+	}
 
 	// 즉시 처리되는 어빌리티이므로 곧바로 종료합니다.
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }
 
-bool UECGameplayAbility_PickupItem::PickUp()
+EECPickupResult UECGameplayAbility_PickupItem::PickUp()
 {
 	AController* Controller = GetECPlayerControllerFromActorInfo();
-	UECInventoryManagerComponent* InventoryComponent = Controller->GetComponentByClass<UECInventoryManagerComponent>();
+	UECInventoryManagerComponent* InventoryComponent = Controller
+		? Controller->GetComponentByClass<UECInventoryManagerComponent>()
+		: nullptr;
 	return UPickupableStatics::AddPickupToInventory(InventoryComponent, Pickupable);
 }

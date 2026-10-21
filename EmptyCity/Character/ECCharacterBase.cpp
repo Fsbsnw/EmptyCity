@@ -60,11 +60,10 @@ void AECCharacterBase::UpdateMovingTag()
 
 void AECCharacterBase::OnDeathStarted(AActor* OwningActor)
 {
-	StartDeathProcess();
-
 	if (Controller)
 	{
 		Controller->SetIgnoreMoveInput(true);
+		Controller->SetIgnoreLookInput(true);
 	}
 
 	UCharacterMovementComponent* MoveComp =	GetCharacterMovement();
@@ -79,6 +78,10 @@ void AECCharacterBase::OnDeathStarted(AActor* OwningActor)
 		// 중력이 적용되도록 Falling으로 전환합니다.
 		MoveComp->SetMovementMode(MOVE_Falling);
 	}
+
+	// 래그돌을 사용하는 파생 클래스는 캡슐/이동 상태가 정리된 뒤 물리를 시작해야
+	// 첫 프레임에 캡슐과 겹쳐 튕겨 나가는 현상을 피할 수 있습니다.
+	StartDeathProcess();
 }
 
 void AECCharacterBase::OnDeathFinished(AActor* OwningActor)

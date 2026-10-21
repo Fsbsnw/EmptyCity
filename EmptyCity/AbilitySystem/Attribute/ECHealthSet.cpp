@@ -1,6 +1,7 @@
 ﻿#include "ECHealthSet.h"
 #include "AbilitySystem/Attribute/ECAttributeSet.h"
 #include "AbilitySystem/ECAbilitySystemComponent.h"
+#include "ECGameplayTags.h"
 #include "GameplayEffectExtension.h"
 
 UECHealthSet::UECHealthSet()
@@ -30,8 +31,12 @@ void UECHealthSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackDat
 {
 	Super::PostGameplayEffectExecute(Data);
 
-	// 치트 모드를 적용한 경우 해당 수치를 1.0으로 설정하면 캐릭터는 체력이 1 이하로 떨어지지 않습니다.
-	float MinimumHealth = 0.0f;
+	// F5 무적 태그가 있으면 피해를 받아도 체력이 1 아래로 내려가지 않습니다.
+	const UECAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponent();
+	const float MinimumHealth = AbilitySystem
+		&& AbilitySystem->HasMatchingGameplayTag(ECGameplayTags::Status_Invincible)
+		? 1.0f
+		: 0.0f;
 	
 	// 효과에 대한 책임을 가지는 객체와 적용을 담당하는 객체를 추출합니다.
 	// ex) 플레이어가 발사한 총알이 적중 → Instigator : 플레이어 / Causer : 총알

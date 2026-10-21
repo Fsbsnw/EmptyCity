@@ -32,7 +32,17 @@ UUIManagerSubsystem* UUIManagerSubsystem::Get(const APlayerController* PlayerCon
 // =========================================================================
 // 화면 전환 연출
 // =========================================================================
-void UUIManagerSubsystem::PlayFadeOut(FOnFadeEvent OnFinishedCallback, float InFadeSpeed)
+bool UUIManagerSubsystem::PlayFadeOut(FOnFadeEvent OnFinishedCallback, float InFadeSpeed)
+{
+	if (IsFadePlaying())
+	{
+		return false;
+	}
+
+	return StartFadeOut(OnFinishedCallback, InFadeSpeed);
+}
+
+bool UUIManagerSubsystem::StartFadeOut(FOnFadeEvent OnFinishedCallback, float InFadeSpeed)
 {
 	FGameplayTag FadeOutTag = ECGameplayTags::InputTag_UI_FadeScreen_Out;
     
@@ -40,18 +50,33 @@ void UUIManagerSubsystem::PlayFadeOut(FOnFadeEvent OnFinishedCallback, float InF
 	{
 		if (UECFadeScreenWidget* FadeOut = Cast<UECFadeScreenWidget>(Widget))
 		{
+			bFadeOutInProgress = true;
 			FadeOut->PlayTransition(InFadeSpeed);
 			// 람다를 통해 애니메이션이 끝나면 매니저가 스스로 제거합니다.
 			FadeOut->OnFadeFinishedDelegate.AddWeakLambda(this, [this, FadeOutTag, OnFinishedCallback]()
 			{
+				bFadeOutInProgress = false;
 				this->CloseWidget(FadeOutTag);
 				OnFinishedCallback.ExecuteIfBound();
 			});
+			return true;
 		}
 	}
+
+	return false;
 }
 
-void UUIManagerSubsystem::PlayFadeIn(FOnFadeEvent OnFinishedCallback, float InFadeSpeed)
+bool UUIManagerSubsystem::PlayFadeIn(FOnFadeEvent OnFinishedCallback, float InFadeSpeed)
+{
+	if (IsFadePlaying())
+	{
+		return false;
+	}
+
+	return StartFadeIn(OnFinishedCallback, InFadeSpeed);
+}
+
+bool UUIManagerSubsystem::StartFadeIn(FOnFadeEvent OnFinishedCallback, float InFadeSpeed)
 {
 	FGameplayTag FadeInTag = ECGameplayTags::InputTag_UI_FadeScreen_In;
     
@@ -59,22 +84,37 @@ void UUIManagerSubsystem::PlayFadeIn(FOnFadeEvent OnFinishedCallback, float InFa
 	{
 		if (UECFadeScreenWidget* FadeIn = Cast<UECFadeScreenWidget>(Widget))
 		{
+			bFadeInInProgress = true;
 			FadeIn->PlayTransition(InFadeSpeed);
 			// 람다를 통해 애니메이션이 끝나면 매니저가 스스로 제거합니다.
 			FadeIn->OnFadeFinishedDelegate.AddWeakLambda(this, [this, FadeInTag, OnFinishedCallback]()
 			{
+				bFadeInInProgress = false;
 				this->CloseWidget(FadeInTag);
 				OnFinishedCallback.ExecuteIfBound();
 			});
+			return true;
 		}
 	}
+
+	return false;
 }
 
-void UUIManagerSubsystem::PlayFadeTransition(FOnFadeEvent OnBlackScreen, float InFadeSpeed)
+bool UUIManagerSubsystem::PlayFadeTransition(
+	FOnFadeEvent OnBlackScreen,
+	float InFadeSpeed,
+	FOnFadeEvent OnTransitionFinished)
 {
+	if (IsFadePlaying())
+	{
+		return false;
+	}
+
+	bFadeTransitionInProgress = true;
+
 	// 페이드 아웃과 페이드 인을 하나의 시퀀스로 실행합니다.
-	PlayFadeOut(FOnFadeEvent::CreateWeakLambda(this,
-		[this, OnBlackScreen, InFadeSpeed]()
+	const bool bFadeOutStarted = StartFadeOut(FOnFadeEvent::CreateWeakLambda(this,
+		[this, OnBlackScreen, InFadeSpeed, OnTransitionFinished]()
 		{
 			// 1. 화면 까매짐 -> 원하는 외부 로직(지도 띄우기 등) 실행
 			OnBlackScreen.ExecuteIfBound();
@@ -83,10 +123,33 @@ void UUIManagerSubsystem::PlayFadeTransition(FOnFadeEvent OnBlackScreen, float I
 			CloseWidget(ECGameplayTags::InputTag_UI_FadeScreen_Out);
 
 			// 3. 페이드 인 실행 (끝나면 알아서 파괴됨)
-			PlayFadeIn(FOnFadeEvent(), InFadeSpeed);
+			const FOnFadeEvent FinishTransition = FOnFadeEvent::CreateWeakLambda(
+				this,
+				[this, OnTransitionFinished]()
+				{
+					bFadeTransitionInProgress = false;
+					OnTransitionFinished.ExecuteIfBound();
+				});
+
+			if (!StartFadeIn(FinishTransition, InFadeSpeed))
+			{
+				FinishTransition.ExecuteIfBound();
+			}
 		}),
 		InFadeSpeed
 	);
+
+	if (!bFadeOutStarted)
+	{
+		bFadeTransitionInProgress = false;
+	}
+
+	return bFadeOutStarted;
+}
+
+bool UUIManagerSubsystem::IsFadePlaying() const
+{
+	return bFadeOutInProgress || bFadeInInProgress || bFadeTransitionInProgress;
 }
 
 // =========================================================================
@@ -97,6 +160,11 @@ void UUIManagerSubsystem::InitializeUIConfig(const FUIConfigData& UIConfig)
 	this->ConfigData = UIConfig;
 	ActiveWidgets.Empty();
 	WidgetStack.Empty();
+	bHUDHiddenForCutscene = false;
+	HUDLayerVisibilityBeforeCutscene = ESlateVisibility::Visible;
+	bFadeOutInProgress = false;
+	bFadeInInProgress = false;
+	bFadeTransitionInProgress = false;
 
 	// 게임 시작 시 전역 네비게이션 설정을 세팅
 	if (FSlateApplication::IsInitialized())
@@ -119,6 +187,36 @@ void UUIManagerSubsystem::InitializeUIConfig(const FUIConfigData& UIConfig)
 			MainLayoutWidget->AddToViewport(); 
 		}
 	}
+}
+
+bool UUIManagerSubsystem::SetHUDHiddenForCutscene(bool bHidden)
+{
+	if (!IsValid(MainLayoutWidget) || !IsValid(MainLayoutWidget->Layer_HUD))
+	{
+		return false;
+	}
+
+	if (bHidden)
+	{
+		if (bHUDHiddenForCutscene)
+		{
+			return true;
+		}
+
+		HUDLayerVisibilityBeforeCutscene = MainLayoutWidget->Layer_HUD->GetVisibility();
+		bHUDHiddenForCutscene = true;
+		MainLayoutWidget->Layer_HUD->SetVisibility(ESlateVisibility::Collapsed);
+		return true;
+	}
+
+	if (!bHUDHiddenForCutscene)
+	{
+		return false;
+	}
+
+	MainLayoutWidget->Layer_HUD->SetVisibility(HUDLayerVisibilityBeforeCutscene);
+	bHUDHiddenForCutscene = false;
+	return true;
 }
 
 UECUserWidget* UUIManagerSubsystem::OpenDynamicWidget(FGameplayTag Tag, const FUIConfigWidget& WidgetConfig, AActor* ContextActor)
@@ -162,7 +260,26 @@ void UUIManagerSubsystem::RequestToggleInput(FGameplayTag Tag, AActor* ContextAc
 	// 위젯 닫기 입력 처리
 	if (Tag.MatchesTagExact(ECGameplayTags::InputTag_UI_Navigation_Escape))
 	{
-		CloseTopWidget();
+		if (WidgetStack.IsEmpty())
+		{
+			ExecuteToggleLogic(ECGameplayTags::InputTag_UI_SystemMenu, ContextActor);
+		}
+		else
+		{
+			CloseTopWidget();
+		}
+		return;
+	}
+
+	// 페이드 중에는 새로운 UI 전환을 시작하지 않습니다.
+	// 단, 이미 열려 있는 위젯을 닫으려는 요청은 추가 페이드 없이 즉시 처리합니다.
+	if (IsFadePlaying())
+	{
+		if (UECUserWidget* ActiveWidget = ActiveWidgets.FindRef(Tag);
+			IsValid(ActiveWidget) && ActiveWidget->IsVisible())
+		{
+			ExecuteToggleLogic(Tag, ContextActor);
+		}
 		return;
 	}
 	
@@ -176,10 +293,15 @@ void UUIManagerSubsystem::RequestToggleInput(FGameplayTag Tag, AActor* ContextAc
 	// 2. 트랜지션이 켜져 있다면: 페이드 아웃 연출 이후에 ToggleLogic 실행
 	if (bUseTransition)
 	{
-		PlayFadeTransition(FOnFadeEvent::CreateWeakLambda(this, [this, Tag, ContextActor]()
+		const bool bTransitionStarted = PlayFadeTransition(FOnFadeEvent::CreateWeakLambda(this, [this, Tag, ContextActor]()
 		{
 			this->ExecuteToggleLogic(Tag, ContextActor);
 		}));
+
+		if (!bTransitionStarted)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("UI 페이드 전환을 시작하지 못했습니다: %s"), *Tag.ToString());
+		}
 	}
 	// 3. 트랜지션이 없다면 (일반 인벤토리 등): 기다리지 않고 즉시 ToggleLogic 실행
 	else
@@ -409,17 +531,34 @@ void UUIManagerSubsystem::UpdateInputMode()
 			PC->bShowMouseCursor = ConfigData.WidgetMap[TopTag].bShowMouseCursor;
 		}
 
-		// 입력 모드 설정 (UI와 게임 입력을 모두 받음)
-		FInputModeGameAndUI InputMode;
-		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-        
-		// 최상단 위젯에 포커스 부여
+		TSharedPtr<SWidget> WidgetToFocus;
 		if (UECUserWidget** TopWidget = ActiveWidgets.Find(TopTag))
 		{
-			InputMode.SetWidgetToFocus((*TopWidget)->TakeWidget());
+			WidgetToFocus = (*TopWidget)->TakeWidget();
 		}
 
-		PC->SetInputMode(InputMode);
+		if (TopTag.MatchesTagExact(ECGameplayTags::InputTag_UI_DeathScreen))
+		{
+			// 사망 화면에서는 마우스/키보드 입력이 게임 캐릭터로 전달되지 않습니다.
+			FInputModeUIOnly InputMode;
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			if (WidgetToFocus.IsValid())
+			{
+				InputMode.SetWidgetToFocus(WidgetToFocus);
+			}
+			PC->SetInputMode(InputMode);
+		}
+		else
+		{
+			// 일반 창은 UI와 게임 입력을 함께 받습니다.
+			FInputModeGameAndUI InputMode;
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			if (WidgetToFocus.IsValid())
+			{
+				InputMode.SetWidgetToFocus(WidgetToFocus);
+			}
+			PC->SetInputMode(InputMode);
+		}
 	}
 	// 스택이 비어있다면 (모든 UI가 닫힘)
 	else

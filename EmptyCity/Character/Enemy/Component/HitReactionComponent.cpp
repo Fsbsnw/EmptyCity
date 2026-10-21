@@ -3,6 +3,7 @@
 #include "ECGameplayTags.h"
 #include "AbilitySystem/ECAbilitySystemComponent.h"
 #include "AbilitySystem/Attribute/ECHealthSet.h"
+#include "Component/Attribute/ECHealthComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -24,7 +25,12 @@ void UHitReactionComponent::InitializeWithAbilitySystem(UECAbilitySystemComponen
 
 void UHitReactionComponent::PlayHitStop(float TimeDuration, float TimeDilation)
 {
-	if (!bCanPlayHitStop)
+	const UECHealthComponent* HealthComponent = UECHealthComponent::FindHealthComponent(GetOwner());
+	const bool bIsDeadOrDying = HealthComponent
+		&& (HealthComponent->GetHealth() <= 0.0f
+			|| HealthComponent->GetDeathState() != EDeathState::NotDead);
+
+	if (!bCanPlayHitStop || bIsDeadOrDying)
 	{
 		return;
 	}
@@ -39,27 +45,50 @@ void UHitReactionComponent::PlayHitStop(float TimeDuration, float TimeDilation)
 	GetWorld()->GetTimerManager().SetTimer(HitStopTimerHandle, this, &ThisClass::RestoreTimeDilation, TimeDuration, false);
 }
 
+void UHitReactionComponent::QueueHitStop(float TimeDuration, float TimeDilation)
+{
+	QueuedHitStopTimeDuration = TimeDuration;
+	QueuedHitStopTimeDilation = TimeDilation;
+	bHasQueuedHitStop = true;
+}
+
+void UHitReactionComponent::PlayQueuedHitStop()
+{
+	if (!bHasQueuedHitStop)
+	{
+		return;
+	}
+
+	bHasQueuedHitStop = false;
+	PlayHitStop(QueuedHitStopTimeDuration, QueuedHitStopTimeDilation);
+}
+
 void UHitReactionComponent::RestoreTimeDilation()
 {
 	GetOwner()->CustomTimeDilation = 1.f;
 }
 
-void UHitReactionComponent::PlayWeakHitReaction(const FVector& HitSourceLocation)
+bool UHitReactionComponent::PlayWeakHitReaction(const FVector& HitSourceLocation)
 {
 	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
 	if (!OwnerCharacter)
 	{
-		return;
+		return false;
 	}
 	
 	UAnimInstance* AnimInstance = OwnerCharacter->GetMesh()->GetAnimInstance();
 
 	if (!AnimInstance || !HitReactionMontage || ASC->HasMatchingGameplayTag(ECGameplayTags::Status_Death_Dying))
 	{
-		return;
+		return false;
 	}
 
-	AnimInstance->Montage_Play(HitReactionMontage,1.0f, EMontagePlayReturnType::MontageLength,0.0f,false);
+	return AnimInstance->Montage_Play(
+		HitReactionMontage,
+		1.0f,
+		EMontagePlayReturnType::MontageLength,
+		0.0f,
+		false) > 0.0f;
 }
 
 void UHitReactionComponent::ApplyGroundKnockback(const FVector& Direction, float InitialSpeed, float Duration)

@@ -3,13 +3,17 @@
 
 #include "Character/Enemy/AI/ECEnemyAIController.h"
 
+#include "Animation/AnimInstance.h"
 #include "ECGameplayTags.h"
 #include "Character/Enemy/ECEnemyCharacterBase.h"
 #include "Character/Player/ECPlayer.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
 #include "StateTree.h"
+#include "TimerManager.h"
 
 void UECEnemyStateTreeAIComponent::SetStateTreeAsset(UStateTree* NewStateTree)
 {
@@ -48,6 +52,9 @@ AECEnemyAIController::AECEnemyAIController()
 void AECEnemyAIController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
+	bIsPawnDead = false;
+	bPausedByDistance = false;
+	bPausedForCinematic = false;
 
 	if (!IsValid(StateTreeComponent))
 	{
@@ -80,6 +87,7 @@ void AECEnemyAIController::OnPossess(APawn* InPawn)
 
 	StateTreeComponent->SetStateTreeAsset(StateTreeAsset);
 	StateTreeComponent->StartLogic();
+	RefreshLogicPauseState();
 
 	UE_LOG(LogTemp, Log,
 		TEXT("%s: %s에 지정된 StateTree %s를 시작했습니다."),
@@ -90,10 +98,16 @@ void AECEnemyAIController::OnPossess(APawn* InPawn)
 
 void AECEnemyAIController::OnUnPossess()
 {
+	GetWorldTimerManager().ClearTimer(LostSightTimerHandle);
+	bLostSightDeferredByActionMontage = false;
+
 	if (IsValid(StateTreeComponent) && StateTreeComponent->IsRunning())
 	{
 		StateTreeComponent->StopLogic(TEXT("Enemy pawn unpossessed"));
 	}
+
+	bPausedByDistance = false;
+	bPausedForCinematic = false;
 
 	Super::OnUnPossess();
 }
@@ -124,8 +138,10 @@ void AECEnemyAIController::BeginPlay()
 void AECEnemyAIController::HandlePawnDeath()
 {
 	bIsPawnDead = true;
+	bLostSightDeferredByActionMontage = false;
 
 	GetWorldTimerManager().ClearTimer(LODTimerHandle);
+	GetWorldTimerManager().ClearTimer(LostSightTimerHandle);
 
 	if (AIPerceptionComponent)
 	{
@@ -141,6 +157,65 @@ void AECEnemyAIController::HandlePawnDeath()
 	StopMovement();
 	ClearFocus(EAIFocusPriority::Gameplay);
 	ClearCombatTarget();
+}
+
+void AECEnemyAIController::EngageTarget(AActor* NewTarget)
+{
+	AECPlayer* TargetPlayer = Cast<AECPlayer>(NewTarget);
+	if (bIsPawnDead || bPausedForCinematic || !IsValid(TargetPlayer))
+	{
+		return;
+	}
+
+	const bool bShouldSendEngageEvent = !bIsInCombat || TargetActor != TargetPlayer;
+
+	GetWorldTimerManager().ClearTimer(LostSightTimerHandle);
+	bLostSightDeferredByActionMontage = false;
+
+	TargetActor = TargetPlayer;
+	bHasLineOfSight = true;
+	bIsInCombat = true;
+	LastKnownTargetLocation = TargetPlayer->GetActorLocation();
+
+	// 거리 LOD로 잠들어 있더라도 피격됐다면 즉시 전투 로직을 깨웁니다.
+	if (bPausedByDistance)
+	{
+		bPausedByDistance = false;
+		RefreshLogicPauseState();
+	}
+
+	if (bShouldSendEngageEvent && IsValid(StateTreeComponent))
+	{
+		if (!StateTreeComponent->IsRunning())
+		{
+			StateTreeComponent->StartLogic();
+		}
+
+		if (StateTreeComponent->IsRunning() && !StateTreeComponent->IsPaused())
+		{
+			FStateTreeEvent Event;
+			Event.Tag = ECGameplayTags::StateTree_Event_Engage;
+			StateTreeComponent->SendStateTreeEvent(Event);
+		}
+	}
+}
+
+void AECEnemyAIController::SetCinematicPaused(bool bPaused)
+{
+	if (bIsPawnDead || bPausedForCinematic == bPaused)
+	{
+		return;
+	}
+
+	bPausedForCinematic = bPaused;
+
+	if (bPaused)
+	{
+		StopMovement();
+		ClearFocus(EAIFocusPriority::Gameplay);
+	}
+
+	RefreshLogicPauseState();
 }
 
 void AECEnemyAIController::UpdateAILOD()
@@ -160,39 +235,48 @@ void AECEnemyAIController::UpdateAILOD()
 
 	if (!StateTreeComponent) return;
 
-	// 2. 거리에 따른 조건 분기
-	if (DistanceToPlayer > SleepDistanceThreshold)
+	const bool bShouldPauseByDistance = DistanceToPlayer > SleepDistanceThreshold;
+	if (bPausedByDistance != bShouldPauseByDistance)
 	{
-		// 일정 거리보다 멀어지면 StateTree를 일시정지(Pause) 시킵니다.
-		if (StateTreeComponent->IsRunning())
-		{
-			StateTreeComponent->PauseLogic(TEXT("플레이어와의 거리가 최적화 범위 밖으로 벗어났습니다 - Sleep"));
-			UE_LOG(LogTemp, Warning, TEXT("플레이어와의 거리가 최적화 범위 밖으로 벗어났습니다 - Sleep"));
-            
-			// 필요하다면 여기서 액터의 틱이나 애니메이션 틱도 완전히 꺼버릴 수 있습니다.
-			MyPawn->SetActorTickEnabled(false);
-			
-			/* 충분히 멀어진 경우, 타이머 주기도 늘리는 것도 고려. 예시 : 4초
-			 * GetWorldTimerManager().SetTimer(LODTimerHandle, this, &ThisClass::UpdateAILOD, 4.0f, true, InitialDelay);
-			 *
-			 */
-		}
+		bPausedByDistance = bShouldPauseByDistance;
+		RefreshLogicPauseState();
 	}
-	else
+}
+
+void AECEnemyAIController::RefreshLogicPauseState()
+{
+	if (bIsPawnDead || !IsValid(StateTreeComponent))
 	{
-		// 다시 범위 안으로 들어오면 StateTree를 재개(Resume)합니다.
-		if (StateTreeComponent->IsPaused())
+		return;
+	}
+
+	const bool bShouldPause = bPausedByDistance || bPausedForCinematic;
+
+	if (bShouldPause)
+	{
+		if (StateTreeComponent->IsRunning() && !StateTreeComponent->IsPaused())
 		{
-			StateTreeComponent->ResumeLogic(TEXT("플레이어와의 거리가 최적화 범위 안으로 들어왔습니다 - Wake Up"));
-			UE_LOG(LogTemp, Warning, TEXT("플레이어와의 거리가 최적화 범위 안으로 들어왔습니다 - Wake Up"));
-			MyPawn->SetActorTickEnabled(true);
+			StateTreeComponent->PauseLogic(
+				bPausedForCinematic
+					? TEXT("Cutscene in progress")
+					: TEXT("AI LOD distance exceeded"));
 		}
+
+		// StateTree만 일시정지하고 Pawn/Animation Tick은 유지합니다.
+		// Actor Tick을 끄면 이동 컴포넌트와 애니메이션 업데이트 시점이 어긋나
+		// 캐릭터가 기본 포즈로 이동하는 현상이 발생할 수 있습니다.
+		return;
+	}
+
+	if (StateTreeComponent->IsPaused())
+	{
+		StateTreeComponent->ResumeLogic(TEXT("All AI pause reasons cleared"));
 	}
 }
 
 void AECEnemyAIController::OnTargetDetected(AActor* Actor, FAIStimulus Stimulus)
 {
-	if (bIsPawnDead)
+	if (bIsPawnDead || bPausedForCinematic)
 	{
 		return;
 	}
@@ -203,22 +287,13 @@ void AECEnemyAIController::OnTargetDetected(AActor* Actor, FAIStimulus Stimulus)
 		// 2. 발견했는지, 놓쳤는지 확인
 		if (Stimulus.WasSuccessfullySensed())
 		{
-			const bool bWasAlreadyInCombat = bIsInCombat;
-			
-			bHasLineOfSight = true;
-			bIsInCombat = true;
-			LastKnownTargetLocation = TargetPlayer->GetActorLocation();
-			
-			// 플레이어를 발견함 (블랙보드 TargetActor에 Player 등록)
-			TargetActor = TargetPlayer;
-			
-			if (!bWasAlreadyInCombat && IsValid(StateTreeComponent) && StateTreeComponent->IsRunning())
+			const bool bHadLineOfSight = bHasLineOfSight;
+			EngageTarget(TargetPlayer);
+
+			if (!bHadLineOfSight)
 			{
-				FStateTreeEvent Event;
-				Event.Tag = ECGameplayTags::StateTree_Event_Engage;
-				StateTreeComponent->SendStateTreeEvent(Event);
+				UE_LOG(LogTemp, Warning, TEXT("플레이어를 발견했습니다."));
 			}
-			UE_LOG(LogTemp, Warning, TEXT("플레이어를 발견했습니다."));
 		}
 		else
 		{
@@ -227,16 +302,88 @@ void AECEnemyAIController::OnTargetDetected(AActor* Actor, FAIStimulus Stimulus)
 				return;
 			}
 			
-			bHasLineOfSight = false;
 			LastKnownTargetLocation = Stimulus.StimulusLocation;
-			
-			UE_LOG(LogTemp, Warning, TEXT("플레이어를 놓쳤습니다."));
+			if (IsActionMontagePlaying())
+			{
+				bLostSightDeferredByActionMontage = true;
+			}
+
+			if (LostSightGracePeriod <= 0.0f)
+			{
+				HandleLostSightGraceExpired();
+			}
+			else
+			{
+				GetWorldTimerManager().SetTimer(
+					LostSightTimerHandle,
+					this,
+					&ThisClass::HandleLostSightGraceExpired,
+					LostSightGracePeriod,
+					false);
+			}
 		}
 	}
 }
 
+void AECEnemyAIController::HandleLostSightGraceExpired()
+{
+	GetWorldTimerManager().ClearTimer(LostSightTimerHandle);
+
+	if (bIsPawnDead || bPausedForCinematic || !IsValid(TargetActor))
+	{
+		return;
+	}
+
+	// 공격 도중 시야를 잃었다고 TargetActor를 지우면 공격 완료 직후 Patrol로 복귀합니다.
+	// 현재 액션이 끝날 때까지 전투 대상을 유지하고 짧게 재검사합니다.
+	if (IsActionMontagePlaying())
+	{
+		bLostSightDeferredByActionMontage = true;
+		GetWorldTimerManager().SetTimer(
+			LostSightTimerHandle,
+			this,
+			&ThisClass::HandleLostSightGraceExpired,
+			0.1f,
+			false);
+		return;
+	}
+
+	// 몽타주가 끝난 프레임에 바로 전투를 해제하지 않고, 기존 시야 상실 유예시간을 다시 부여합니다.
+	// 이 사이 StateTree가 살아 있는 TargetActor를 기준으로 회전/추적하면 Sight가 다시 갱신됩니다.
+	if (bLostSightDeferredByActionMontage)
+	{
+		bLostSightDeferredByActionMontage = false;
+		if (LostSightGracePeriod > 0.0f)
+		{
+			GetWorldTimerManager().SetTimer(
+				LostSightTimerHandle,
+				this,
+				&ThisClass::HandleLostSightGraceExpired,
+				LostSightGracePeriod,
+				false);
+			return;
+		}
+	}
+
+	bHasLineOfSight = false;
+	UE_LOG(LogTemp, Warning, TEXT("플레이어를 놓쳤습니다."));
+	ClearCombatTarget();
+}
+
+bool AECEnemyAIController::IsActionMontagePlaying() const
+{
+	const ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn());
+	const USkeletalMeshComponent* Mesh = ControlledCharacter ? ControlledCharacter->GetMesh() : nullptr;
+	const UAnimInstance* AnimInstance = Mesh ? Mesh->GetAnimInstance() : nullptr;
+	return AnimInstance && AnimInstance->IsAnyMontagePlaying();
+}
+
 void AECEnemyAIController::ClearCombatTarget()
 {
+	GetWorldTimerManager().ClearTimer(LostSightTimerHandle);
+	bLostSightDeferredByActionMontage = false;
+	ClearFocus(EAIFocusPriority::Gameplay);
+
 	TargetActor = nullptr;
 	bHasLineOfSight = false;
 	bIsInCombat = false;

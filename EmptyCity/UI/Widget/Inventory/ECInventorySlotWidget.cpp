@@ -3,11 +3,13 @@
 
 #include "UI/Widget/Inventory/ECInventorySlotWidget.h"
 
+#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Data/Item/ECItemTableRow.h"
 #include "UI/Widget/Common/Item/ECItemTooltipWidget.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Engine/GameInstance.h"
+#include "Engine/Texture2D.h"
 #include "Inventory/ECInventoryItemInstance.h"
 #include "Subsystem/ECItemDataSubsystem.h"
 #include "Subsystem/ECProgressionSubsystem.h"
@@ -15,7 +17,9 @@
 void UECInventorySlotWidget::SetEmptySlot()
 {
 	CachedItemInstance = nullptr;
-	SetSelected(false);
+	CachedStackCount = 0;
+	CachedPrice = 0;
+	SetSelectedState(false);
 
 	// 빈 슬롯 처리: 투명하게 하거나 기본 배경 텍스처로 변경
 	Image_ItemIcon->SetVisibility(ESlateVisibility::Hidden);
@@ -38,6 +42,44 @@ void UECInventorySlotWidget::SetEmptySlot()
 	SetToolTip(nullptr); // 빈 슬롯은 툴팁 없음
 }
 
+void UECInventorySlotWidget::SetInventoryDragSource(EECInventoryDragSource NewDragSource)
+{
+	DragSource = NewDragSource;
+}
+
+void UECInventorySlotWidget::SetSelectedState(bool bNewSelected)
+{
+	bIsSelected = bNewSelected;
+	// 기존 WBP의 선택 테두리 등 추가 연출은 그대로 실행합니다.
+	SetSelected(bIsSelected);
+	// WBP가 Image_Slot을 변경하더라도 최종 이미지는 스택 상태를 기준으로 맞춥니다.
+	RefreshSlotBackground();
+}
+
+void UECInventorySlotWidget::RefreshSlotBackground()
+{
+	if (!Image_Slot)
+	{
+		return;
+	}
+
+	const bool bUsesStackImage = CachedStackCount > 1;
+	UTexture2D* TargetImage = nullptr;
+	if (bUsesStackImage)
+	{
+		TargetImage = bIsSelected ? StackSelectedSlotImage : StackNormalSlotImage;
+	}
+	else
+	{
+		TargetImage = bIsSelected ? SingleSelectedSlotImage : SingleNormalSlotImage;
+	}
+
+	if (TargetImage)
+	{
+		Image_Slot->SetBrushFromTexture(TargetImage, false);
+	}
+}
+
 FReply UECInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
@@ -53,10 +95,56 @@ FReply UECInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeomet
 	{
 		// 빈 슬롯은 nullptr를 전달해 부모 인벤토리 위젯의 현재 선택을 해제한다.
 		OnClicked.ExecuteIfBound(CachedItemInstance);
+		if (IsValid(CachedItemInstance) && DragSource != EECInventoryDragSource::None)
+		{
+			return UWidgetBlueprintLibrary::DetectDragIfPressed(
+				InMouseEvent,
+				this,
+				EKeys::LeftMouseButton).NativeReply;
+		}
 		return FReply::Handled();
 	}
 
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void UECInventorySlotWidget::NativeOnDragDetected(
+	const FGeometry& InGeometry,
+	const FPointerEvent& InMouseEvent,
+	UDragDropOperation*& OutOperation)
+{
+	Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
+	if (!IsValid(CachedItemInstance) || DragSource == EECInventoryDragSource::None)
+	{
+		return;
+	}
+
+	UECInventoryDragDropOperation* DragOperation = Cast<UECInventoryDragDropOperation>(
+		UWidgetBlueprintLibrary::CreateDragDropOperation(
+			UECInventoryDragDropOperation::StaticClass()));
+	if (!DragOperation)
+	{
+		return;
+	}
+
+	DragOperation->Initialize(CachedItemInstance, DragSource, CachedStackCount);
+	DragOperation->Pivot = EDragPivot::MouseDown;
+
+	if (APlayerController* OwningPlayer = GetOwningPlayer())
+	{
+		UECInventorySlotWidget* DragVisual = CreateWidget<UECInventorySlotWidget>(
+			OwningPlayer,
+			GetClass());
+		if (DragVisual)
+		{
+			DragVisual->SetInventoryDragSource(EECInventoryDragSource::None);
+			DragVisual->RefreshSlotUI(CachedItemInstance, CachedStackCount, CachedPrice);
+			DragVisual->SetVisibility(ESlateVisibility::HitTestInvisible);
+			DragOperation->DefaultDragVisual = DragVisual;
+		}
+	}
+
+	OutOperation = DragOperation;
 }
 
 FReply UECInventorySlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
@@ -83,6 +171,8 @@ void UECInventorySlotWidget::RefreshSlotUI(UECInventoryItemInstance* ItemInstanc
 	}
 
 	CachedItemInstance = ItemInstance;
+	CachedStackCount = FMath::Max(0, StackCount);
+	CachedPrice = FMath::Max(0, Price);
 
 	// 2. DT_Item에서 공통 UI 데이터를 가져옵니다.
 	const FECItemTableRow* ItemData = UECItemDataSubsystem::Get(this).FindItemData(ItemInstance);
@@ -188,4 +278,6 @@ void UECInventorySlotWidget::RefreshSlotUI(UECInventoryItemInstance* ItemInstanc
 			Text_StackCount->SetVisibility(ESlateVisibility::Hidden);
 		}
 	}
+
+	RefreshSlotBackground();
 }

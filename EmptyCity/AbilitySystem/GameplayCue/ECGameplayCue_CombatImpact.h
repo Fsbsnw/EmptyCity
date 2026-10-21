@@ -6,7 +6,7 @@
 #include "GameplayCueNotify_Static.h"
 #include "ECGameplayCue_CombatImpact.generated.h"
 
-class UCombatFeedbackDataAsset;
+class UECCombatFeedbackDataAsset;
 /**
  * 
  */
@@ -21,5 +21,5 @@ public:
 protected:
 	/** 전투 피드백 관련 데이터 에셋입니다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Feedback Data")
-	TObjectPtr<const UCombatFeedbackDataAsset> FeedbackDataAsset;
+	TObjectPtr<const UECCombatFeedbackDataAsset> FeedbackDataAsset;
 };

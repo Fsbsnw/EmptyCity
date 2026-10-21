@@ -72,7 +72,8 @@ protected:
 	TObjectPtr<UDataTable> NotificationDefinitionTable;
 
 	/** 알림 타입을 설정하는 태그입니다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Notification")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Notification",
+		meta = (Categories = "TAG.Notification"))
 	FGameplayTag NotificationType;
 
 private:

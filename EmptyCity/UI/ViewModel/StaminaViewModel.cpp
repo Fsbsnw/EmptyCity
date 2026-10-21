@@ -6,23 +6,35 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attribute/ECStaminaSet.h"
+#include "GameFramework/Pawn.h"
 
 void UStaminaViewModel::BindCallbacksToDependencies(AActor* ContextActor)
 {
-	if (!ContextActor)
+	UnbindAttributeDelegates();
+	Super::BindCallbacksToDependencies(ContextActor);
+
+	UAbilitySystemComponent* ASC = ContextActor
+		? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(ContextActor)
+		: nullptr;
+	if (!ASC)
 	{
-		return;
+		ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPlayerPawn());
 	}
-	
-	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(ContextActor);
 
 	if (ASC)
 	{
 		const UECStaminaSet* StaminaSet = ASC->GetSet<UECStaminaSet>();
 		if (StaminaSet)
 		{
-			StaminaSet->OnStaminaChanged.AddUObject(this, &ThisClass::HandleStaminaChanged);
-			StaminaSet->OnMaxStaminaChanged.AddUObject(this, &ThisClass::HandleMaxStaminaChanged);
+			AbilitySystemComponent = ASC;
+			StaminaChangedHandle = ASC->GetGameplayAttributeValueChangeDelegate(
+				UECStaminaSet::GetStaminaAttribute()).AddUObject(
+					this,
+					&ThisClass::HandleStaminaChanged);
+			MaxStaminaChangedHandle = ASC->GetGameplayAttributeValueChangeDelegate(
+				UECStaminaSet::GetMaxStaminaAttribute()).AddUObject(
+					this,
+					&ThisClass::HandleMaxStaminaChanged);
 			
 			SetCurrentStamina(FMath::RoundToInt(StaminaSet->GetStamina()));
 			SetMaxStamina(FMath::RoundToInt(StaminaSet->GetMaxStamina()));
@@ -32,8 +44,17 @@ void UStaminaViewModel::BindCallbacksToDependencies(AActor* ContextActor)
 
 void UStaminaViewModel::BroadcastInitialValues()
 {
+	Super::BroadcastInitialValues();
+
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(CurrentStamina);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(MaxStamina);
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetStaminaPercent);
+}
+
+void UStaminaViewModel::BeginDestroy()
+{
+	UnbindAttributeDelegates();
+	Super::BeginDestroy();
 }
 
 void UStaminaViewModel::SetCurrentStamina(int32 NewStamina)
@@ -47,7 +68,10 @@ void UStaminaViewModel::SetCurrentStamina(int32 NewStamina)
 
 void UStaminaViewModel::SetMaxStamina(int32 NewMaxStamina)
 {
-	UE_MVVM_SET_PROPERTY_VALUE(MaxStamina, NewMaxStamina);
+	if (UE_MVVM_SET_PROPERTY_VALUE(MaxStamina, NewMaxStamina))
+	{
+		UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetStaminaPercent);
+	}
 }
 
 float UStaminaViewModel::GetStaminaPercent() const
@@ -61,14 +85,33 @@ float UStaminaViewModel::GetStaminaPercent() const
 	return static_cast<float>(CurrentStamina) / static_cast<float>(MaxStamina);
 }
 
-void UStaminaViewModel::HandleStaminaChanged(AActor* EffectInstigator, AActor* EffectCauser,
-	const FGameplayEffectSpec* EffectSpec, float EffectMagnitude, float OldValue, float NewValue)
+void UStaminaViewModel::HandleStaminaChanged(const FOnAttributeChangeData& Data)
 {
-	SetCurrentStamina(FMath::RoundToInt(NewValue));
+	SetCurrentStamina(FMath::RoundToInt(Data.NewValue));
 }
 
-void UStaminaViewModel::HandleMaxStaminaChanged(AActor* EffectInstigator, AActor* EffectCauser,
-	const FGameplayEffectSpec* EffectSpec, float EffectMagnitude, float OldValue, float NewValue)
+void UStaminaViewModel::HandleMaxStaminaChanged(const FOnAttributeChangeData& Data)
 {
-	SetMaxStamina(FMath::RoundToInt(NewValue));
+	SetMaxStamina(FMath::RoundToInt(Data.NewValue));
+}
+
+void UStaminaViewModel::UnbindAttributeDelegates()
+{
+	if (UAbilitySystemComponent* ASC = AbilitySystemComponent.Get())
+	{
+		if (StaminaChangedHandle.IsValid())
+		{
+			ASC->GetGameplayAttributeValueChangeDelegate(
+				UECStaminaSet::GetStaminaAttribute()).Remove(StaminaChangedHandle);
+		}
+		if (MaxStaminaChangedHandle.IsValid())
+		{
+			ASC->GetGameplayAttributeValueChangeDelegate(
+				UECStaminaSet::GetMaxStaminaAttribute()).Remove(MaxStaminaChangedHandle);
+		}
+	}
+
+	StaminaChangedHandle.Reset();
+	MaxStaminaChangedHandle.Reset();
+	AbilitySystemComponent.Reset();
 }

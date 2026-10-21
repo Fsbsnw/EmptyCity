@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Components/SlateWrapperTypes.h"
 #include "GameplayTagContainer.h"
 #include "Data/UI/UIConfigDataAsset.h"
 #include "Subsystems/LocalPlayerSubsystem.h"
@@ -38,18 +39,28 @@ public:
 	/** 클릭된 위젯에 맞게 Focus Stack을 업데이트합니다. */
 	void UpdateFocusStack(UECUserWidget* FocusedWidget);
 
+	/** 컷씬 동안 HUD 레이어만 숨기거나 컷씬 시작 전 가시성으로 복구합니다. */
+	bool SetHUDHiddenForCutscene(bool bHidden);
+
 // =========================================================================
 // 화면 전환 연출
 // =========================================================================
 public:
 	/** 페이드 아웃을 실행합니다.(맵 이동, 혹은 침대 수면 시작 시) */
-	void PlayFadeOut(FOnFadeEvent OnFinishedCallback = FOnFadeEvent(), float InFadeSpeed = 1.f);
+	bool PlayFadeOut(FOnFadeEvent OnFinishedCallback = FOnFadeEvent(), float InFadeSpeed = 1.f);
 
 	/** 페이드 인을 실행합니다. (맵 시작 시, 혹은 수면 종료 시) */
-	void PlayFadeIn(FOnFadeEvent OnFinishedCallback = FOnFadeEvent(), float InFadeSpeed = 1.f);
+	bool PlayFadeIn(FOnFadeEvent OnFinishedCallback = FOnFadeEvent(), float InFadeSpeed = 1.f);
 
 	/** 페이드 아웃/인 결합 (UI가 열리거나 닫힐 때 연출용) */
-	void PlayFadeTransition(FOnFadeEvent OnBlackScreen = FOnFadeEvent(), float InFadeSpeed = 1.f);
+	bool PlayFadeTransition(
+		FOnFadeEvent OnBlackScreen = FOnFadeEvent(),
+		float InFadeSpeed = 1.f,
+		FOnFadeEvent OnTransitionFinished = FOnFadeEvent());
+
+	/** 페이드 아웃, 페이드 인 또는 결합 전환이 실행 중인지 반환합니다. */
+	UFUNCTION(BlueprintPure, Category="UI|Transition")
+	bool IsFadePlaying() const;
 
 // =========================================================================
 // 외부 동적 위젯 관리
@@ -70,6 +81,12 @@ public:
 // 내부 위젯 관리
 // =========================================================================
 private:
+	/** 다른 페이드 실행 여부를 검사하지 않고 페이드 아웃 한 구간을 시작합니다. */
+	bool StartFadeOut(FOnFadeEvent OnFinishedCallback, float InFadeSpeed);
+
+	/** 다른 페이드 실행 여부를 검사하지 않고 페이드 인 한 구간을 시작합니다. */
+	bool StartFadeIn(FOnFadeEvent OnFinishedCallback, float InFadeSpeed);
+
 	/** 지정된 태그에 해당하는 위젯을 생성(또는 캐시에서 로드)하여 뷰포트에 출력합니다. */
 	UECUserWidget* OpenWidget(FGameplayTag Tag, AActor* ContextActor = nullptr);
 
@@ -113,4 +130,16 @@ private:
 	/** 화면에 띄울 메인 레이아웃 위젯 */
 	UPROPERTY()
 	UECMainLayoutWidget* MainLayoutWidget;
+
+	ESlateVisibility HUDLayerVisibilityBeforeCutscene = ESlateVisibility::Visible;
+	bool bHUDHiddenForCutscene = false;
+
+	/** 단일 페이드 아웃 애니메이션이 실행 중인지 여부입니다. */
+	bool bFadeOutInProgress = false;
+
+	/** 단일 페이드 인 애니메이션이 실행 중인지 여부입니다. */
+	bool bFadeInInProgress = false;
+
+	/** 페이드 아웃과 인을 결합한 전체 전환이 실행 중인지 여부입니다. */
+	bool bFadeTransitionInProgress = false;
 };

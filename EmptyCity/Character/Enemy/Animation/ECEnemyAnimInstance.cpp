@@ -13,6 +13,16 @@ void UECEnemyAnimInstance::NativeInitializeAnimation()
 {
 	Super::NativeInitializeAnimation();
 
+	if (const APawn* OwningPawn = TryGetPawnOwner())
+	{
+		PreviousOwnerLocation = OwningPawn->GetActorLocation();
+		bHasPreviousOwnerLocation = true;
+	}
+	else
+	{
+		bHasPreviousOwnerLocation = false;
+	}
+
 	AActor* OwningActor = GetOwningActor();
 	
 	if (!OwningActor)
@@ -42,16 +52,43 @@ void UECEnemyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		MoveSpeed = 0.0f;
 		MoveDirection = 0.0f;
+		bHasPreviousOwnerLocation = false;
 		return;
 	}
 
-	const FVector Velocity = OwningPawn->GetVelocity();
-	MoveSpeed = Velocity.Size2D();
-	MoveDirection = UKismetAnimationLibrary::CalculateDirection(Velocity, OwningPawn->GetActorRotation());
+	const FVector CurrentOwnerLocation = OwningPawn->GetActorLocation();
+	FVector EffectiveVelocity = OwningPawn->GetVelocity();
+
+	// Sequencer의 Transform 트랙은 Pawn 위치를 직접 변경하므로 CharacterMovement의 Velocity가 0입니다.
+	// 그 상태에서도 실제 프레임 간 이동량을 사용해 걷기 BlendSpace가 정상적으로 갱신되게 합니다.
+	if (EffectiveVelocity.SizeSquared2D() <= KINDA_SMALL_NUMBER
+		&& bHasPreviousOwnerLocation
+		&& DeltaSeconds > SMALL_NUMBER)
+	{
+		const FVector ExternalMovementVelocity =
+			(CurrentOwnerLocation - PreviousOwnerLocation) / DeltaSeconds;
+
+		// 레벨 이동이나 순간이동은 걷기 속도로 취급하지 않습니다.
+		constexpr float MaxExternalMovementSpeed = 5000.0f;
+		if (ExternalMovementVelocity.SizeSquared2D() <= FMath::Square(MaxExternalMovementSpeed))
+		{
+			EffectiveVelocity = ExternalMovementVelocity;
+		}
+	}
+
+	PreviousOwnerLocation = CurrentOwnerLocation;
+	bHasPreviousOwnerLocation = true;
+
+	MoveSpeed = EffectiveVelocity.Size2D();
+	MoveDirection = UKismetAnimationLibrary::CalculateDirection(
+		EffectiveVelocity,
+		OwningPawn->GetActorRotation());
 }
 
 void UECEnemyAnimInstance::NativeUninitializeAnimation()
 {
+	bHasPreviousOwnerLocation = false;
+
 	AActor* OwningActor = GetOwningActor();
 	
 	if (OwningActor)

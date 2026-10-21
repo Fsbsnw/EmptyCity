@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Data/Item/ECItemTableRow.h"
 #include "UI/ViewModel/ECViewModelBase.h"
 #include "InventoryViewModel.generated.h"
 
@@ -27,6 +28,9 @@ public:
 
 	/** Inventory Entries들을 읽어오는 함수입니다. (위젯이랑 바인딩) */
 	const TArray<FInventoryEntry>& GetInventoryEntries() const;
+
+	/** 인벤토리 표시 카테고리에 해당하는 엔트리만 반환합니다. */
+	TArray<FInventoryEntry> GetInventoryEntriesByCategory(EECInventoryItemCategory Category) const;
 
 	/** 특정 아이템 인스턴스가 현재 인벤토리에 남아 있는지 확인합니다. */
 	bool ContainsItem(UECInventoryItemInstance* ItemInstance) const;

@@ -4,9 +4,17 @@
 #include "GameplayEffect.h"
 #include "AbilitySystem/ECAbilitySystemComponent.h"
 #include "Character/Player/Controller/ECPlayerController.h"
+#include "Equipment/ECQuickBarComponent.h"
 #include "Inventory/ECInventoryManagerComponent.h"
 #include "Inventory/ECInventoryItemInstance.h"
 #include "Inventory/Fragment/InventoryFragment_Consumable.h"
+#include "Subsystem/ECSoundSubsystem.h"
+
+namespace QuickSlotSoundRows
+{
+	const FName Health(TEXT("SFX_Item_Use_Health"));
+	const FName Stamina(TEXT("SFX_Item_Use_Stamina"));
+}
 
 UECGameplayAbility_UseItem::UECGameplayAbility_UseItem()
 {
@@ -54,6 +62,15 @@ void UECGameplayAbility_UseItem::ActivateAbility(const FGameplayAbilitySpecHandl
 	}
 	UE_LOG(LogTemp, Warning, TEXT("[%hs] : 아이템 %d개 소모 완료. GE를 적용합니다."), __FUNCTION__, Consumable->ConsumeCount);
 
+	const int32 QuickSlotIndex = FMath::RoundToInt(TriggerEventData->EventMagnitude) - 1;
+	if (QuickSlotIndex >= 0)
+	{
+		if (UECQuickBarComponent* QuickBar = PC->GetQuickBarComponent())
+		{
+			QuickBar->NotifySlotUsed(QuickSlotIndex);
+		}
+	}
+
 	// Fragment가 지정한 GE를 사용자에게 적용한다. 회복 종류(HP/Stamina)·회복량은 전적으로 GE 에셋이 결정한다.
 	if (UECAbilitySystemComponent* ASC = GetECAbilitySystemComponentFromActorInfo())
 	{
@@ -63,6 +80,16 @@ void UECGameplayAbility_UseItem::ActivateAbility(const FGameplayAbilitySpecHandl
 		{
 			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 			UE_LOG(LogTemp, Warning, TEXT("[%hs] : GE 적용 완료: %s"), __FUNCTION__, *Consumable->EffectToApply->GetName());
+
+			const int32 QuickSlotNumber = QuickSlotIndex + 1;
+			if (QuickSlotNumber == 1)
+			{
+				UECSoundSubsystem::Get(this).PlaySFXByName(QuickSlotSoundRows::Health);
+			}
+			else if (QuickSlotNumber == 2)
+			{
+				UECSoundSubsystem::Get(this).PlaySFXByName(QuickSlotSoundRows::Stamina);
+			}
 		}
 	}
 

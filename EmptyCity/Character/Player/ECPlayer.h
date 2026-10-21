@@ -2,18 +2,23 @@
 
 #include "CoreMinimal.h"
 #include "Character/ECCharacterBase.h"
+#include "Data/Workbench/ECWorkbenchUpgradeTypes.h"
+#include "Engine/DataTable.h"
 #include "GameplayTagContainer.h"
 #include "ECPlayer.generated.h"
 
 class UECQuickBarComponent;
+class UECFootstepComponent;
 class UECInventoryManagerComponent;
 class UECInventoryItemDefinition;
 class UECEquipmentManagerComponent;
 class UECWeaponInstance;
 class UECCameraComponent;
+class UStaticMeshComponent;
 class UInputMappingContext;
 class UECInputConfig;
 struct FInputActionValue;
+struct FOnAttributeChangeData;
 
 /** 게임 시작 시 지급할 초기 아이템 한 개의 설정입니다. (인벤토리 지급 + 선택적 QuickBar 등록) */
 USTRUCT(BlueprintType)
@@ -52,9 +57,24 @@ public:
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void BeginPlay() override;
 	virtual bool CanJumpInternal_Implementation() const override;
+
+protected:
+	/** 플레이어 본체를 래그돌로 전환하고 카메라가 머리 본을 따라가게 합니다. */
+	virtual void StartDeathProcess() override;
+
+	/** 래그돌을 멈추고 카메라를 마지막 월드 위치에 유지합니다. */
+	void FinishDeathRagdoll();
 	
 	
-// ─────────────────────────────────────────────────────────────	
+// ─────────────────────────────────────────────────────────────
+// Attribute Method
+// ─────────────────────────────────────────────────────────────
+private:
+	/** MoveSpeed Attribute 변경값을 CharacterMovementComponent에 반영합니다. */
+	void OnMoveSpeedChanged(const FOnAttributeChangeData& Data);
+
+
+// ─────────────────────────────────────────────────────────────
 // Inventory Function
 // ─────────────────────────────────────────────────────────────	
 private:
@@ -92,6 +112,23 @@ private:
 private:
 	/** ASC가 MovementBlockingTags 중 하나라도 보유하고 있는지 확인합니다. */
 	bool HasAnyMovementBlockingTag() const;
+
+
+// ───────────────────────────────────────────────────────────
+// Farming Animation
+// ───────────────────────────────────────────────────────────
+public:
+	/** 파밍 대상에 맞는 도끼/곡괭이를 1인칭 Mesh 소켓에 표시하거나 숨깁니다. */
+	void SetFirstPersonFarmingToolActive(bool bActive, EECWorkbenchUpgradeType ToolType = EECWorkbenchUpgradeType::MAX);
+
+	/** 현재 파밍 대상의 DT_Sound 행을 설정합니다. */
+	void SetActiveFarmingSound(const FDataTableRowHandle& InFarmingSound) { ActiveFarmingSound = InFarmingSound; }
+
+	/** 현재 파밍 대상의 DT_Sound 행을 반환합니다. */
+	const FDataTableRowHandle& GetActiveFarmingSound() const { return ActiveFarmingSound; }
+
+	/** 사망 연출을 종료하고 현재 플레이어 Pawn을 다시 조작 가능한 상태로 복구합니다. */
+	void RecoverFromDeath();
 	
 	
 	
@@ -106,10 +143,48 @@ protected:
 	/** 1인칭 시점의 Mesh 입니다. */
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<USkeletalMeshComponent> FirstPersonMesh;
-	
+
+	/** DT_Item의 도끼/곡괭이 메시를 파밍 중에만 표시하는 1인칭 전용 컴포넌트입니다. */
+	UPROPERTY(VisibleAnywhere, Category = "변수|파밍")
+	TObjectPtr<UStaticMeshComponent> FarmingToolMeshComponent;
+
 	/** 이 캐릭터가 장착한 장비를 관리하는 컴포넌트입니다. (장비 Actor 스폰, 어빌리티 부여 등) */
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UECEquipmentManagerComponent> EquipmentManagerComponent;
+
+	/** 이동 거리와 발밑 표면에 따라 발소리를 재생하는 컴포넌트입니다. */
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UECFootstepComponent> FootstepComponent;
+
+
+// ─────────────────────────────────────────────────────────────
+// Death Ragdoll
+// ─────────────────────────────────────────────────────────────
+protected:
+	/** 사망 카메라가 따라갈 3인칭 Mesh의 본 또는 소켓입니다. */
+	UPROPERTY(EditDefaultsOnly, Category = "변수|사망|래그돌")
+	FName DeathCameraSocketName = TEXT("Head");
+
+	/** 래그돌 시뮬레이션과 충격을 시작할 본입니다. */
+	UPROPERTY(EditDefaultsOnly, Category = "변수|사망|래그돌")
+	FName DeathRagdollRootBoneName = TEXT("pelvis");
+
+	/** 래그돌을 유지할 시간입니다. */
+	UPROPERTY(EditDefaultsOnly, Category = "변수|사망|래그돌", meta = (ClampMin = "0.0"))
+	float DeathRagdollDuration = 2.0f;
+
+	FTimerHandle DeathRagdollTimerHandle;
+
+	/** 사망 래그돌 해제 후 복원할 컴포넌트 초기 상태입니다. */
+	FTransform InitialMeshRelativeTransform;
+	FTransform InitialCameraRelativeTransform;
+	FName InitialMeshCollisionProfileName;
+	FName InitialCapsuleCollisionProfileName;
+	ECollisionEnabled::Type InitialMeshCollisionEnabled = ECollisionEnabled::NoCollision;
+	ECollisionEnabled::Type InitialCapsuleCollisionEnabled = ECollisionEnabled::QueryAndPhysics;
+	ECollisionEnabled::Type InitialFirstPersonCollisionEnabled = ECollisionEnabled::NoCollision;
+	bool bInitialMeshGravityEnabled = true;
+	bool bDeathRecoveryStateCached = false;
 
 	
 // ─────────────────────────────────────────────────────────────
@@ -158,5 +233,7 @@ public:
 private:
 	TWeakObjectPtr<UECInventoryManagerComponent> InventoryManagerComponent;
 	TWeakObjectPtr<UECQuickBarComponent> QuickBarComponent;
-	
+
+	/** 공용 파밍 몽타주의 Notify가 사용할 현재 파밍 대상별 사운드입니다. */
+	FDataTableRowHandle ActiveFarmingSound;
 };

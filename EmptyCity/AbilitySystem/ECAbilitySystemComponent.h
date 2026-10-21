@@ -34,6 +34,12 @@ public:
 	/** 매 프레임 호출되어, 위에서 모아둔 입력 목록을 실제 Ability 발동으로 변환한다. */
 	void ProcessAbilityInput(float DeltaTime, bool bGamePaused);
 
+	/** 현재 대기 중이거나 유지 중인 Ability 입력을 모두 비웁니다. */
+	void ClearAbilityInput();
+
+	/** 사망 등으로 취소된 OnSpawn 상시 어빌리티를 다시 활성화합니다. */
+	void ReactivateOnSpawnAbilities();
+
 private:	
 	/** 입력이 시작된 Ability를 관리하는 Handle 입니다. */
 	TArray<FGameplayAbilitySpecHandle> InputPressedSpecHandles;

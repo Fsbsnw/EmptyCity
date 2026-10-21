@@ -148,6 +148,41 @@ void UECAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bGameP
 	InputReleasedSpecHandles.Reset();
 }
 
+void UECAbilitySystemComponent::ClearAbilityInput()
+{
+	for (const FGameplayAbilitySpecHandle& SpecHandle : InputHeldSpecHandles)
+	{
+		if (FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecFromHandle(SpecHandle))
+		{
+			AbilitySpec->InputPressed = false;
+		}
+	}
+
+	InputPressedSpecHandles.Reset();
+	InputReleasedSpecHandles.Reset();
+	InputHeldSpecHandles.Reset();
+}
+
+void UECAbilitySystemComponent::ReactivateOnSpawnAbilities()
+{
+	TArray<FGameplayAbilitySpecHandle> AbilitiesToActivate;
+	for (const FGameplayAbilitySpec& AbilitySpec : ActivatableAbilities.Items)
+	{
+		const UECGameplayAbility* Ability = Cast<UECGameplayAbility>(AbilitySpec.Ability);
+		if (Ability
+			&& !AbilitySpec.IsActive()
+			&& Ability->ActivationPolicy == EAbilityActivationPolicy::OnSpawn)
+		{
+			AbilitiesToActivate.Add(AbilitySpec.Handle);
+		}
+	}
+
+	for (const FGameplayAbilitySpecHandle& AbilityHandle : AbilitiesToActivate)
+	{
+		TryActivateAbility(AbilityHandle);
+	}
+}
+
 bool UECAbilitySystemComponent::IsActivationGroupBlocked(EAbilityActivationGroup Group) const
 {
 	bool bBlocked = false;

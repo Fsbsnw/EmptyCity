@@ -27,6 +27,8 @@ void UECQuickBarComponent::AddItemToSlot(int32 SlotIndex, UECInventoryItemInstan
 		if (Slots[SlotIndex] == nullptr)
 		{
 			Slots[SlotIndex] = Item;
+
+			OnQuickBarSlotChanged.Broadcast(SlotIndex, Item);
 		}
 	}
 }
@@ -61,6 +63,14 @@ UECInventoryItemInstance* UECQuickBarComponent::RemoveItemFromSlot(int32 SlotInd
 		if (Result != nullptr)
 		{
 			Slots[SlotIndex] = nullptr;
+
+			OnQuickBarSlotChanged.Broadcast(SlotIndex, nullptr);
+
+			if (LastUsedSlotIndex == SlotIndex)
+			{
+				LastUsedSlotIndex = -1;
+				OnQuickBarSlotUsed.Broadcast(LastUsedSlotIndex);
+			}
 		}
 	}
 
@@ -103,7 +113,19 @@ void UECQuickBarComponent::UseSlot(int32 SlotIndex)
 	FGameplayEventData Payload;
 	Payload.EventTag = ECGameplayTags::GameplayEvent_Item_Use;
 	Payload.OptionalObject = Item;
+	Payload.EventMagnitude = static_cast<float>(SlotIndex + 1);
 	ASC->HandleGameplayEvent(Payload.EventTag, &Payload);
+}
+
+void UECQuickBarComponent::NotifySlotUsed(int32 SlotIndex)
+{
+	if (!Slots.IsValidIndex(SlotIndex) || LastUsedSlotIndex == SlotIndex)
+	{
+		return;
+	}
+
+	LastUsedSlotIndex = SlotIndex;
+	OnQuickBarSlotUsed.Broadcast(LastUsedSlotIndex);
 }
 
 void UECQuickBarComponent::UnequipItemInSlot()
@@ -132,12 +154,7 @@ void UECQuickBarComponent::EquipItemInSlot()
 			{
 				if (UECEquipmentManagerComponent* EquipmentManager = FindEquipmentManager())
 				{
-					EquippedItem = EquipmentManager->EquipItem(EquipDef);
-					if (EquippedItem)
-					{
-						// Instigator를 설정해 어느 InventoryItemInstance가 이 장착을 유발했는지 역추적할 수 있게 한다.
-						EquippedItem->Instigator = SlotItem;
-					}
+					EquippedItem = EquipmentManager->EquipItem(EquipDef, SlotItem);
 				}
 			}
 		}

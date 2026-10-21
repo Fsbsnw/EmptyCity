@@ -9,6 +9,7 @@
 #include "ECPlayerController.generated.h"
 
 class UECIndicatorManagerComponent;
+class UECInvincibilityIndicatorWidget;
 struct FInteractionOption;
 class UECQuickBarComponent;
 class UECInventoryManagerComponent;
@@ -27,6 +28,7 @@ public:
 	AECPlayerController();
 	virtual void PostProcessInput(const float DeltaTime, const bool bGamePaused) override;
 	virtual void BeginPlay() override;
+	virtual bool InputKey(const FInputKeyParams& Params) override;
 
 
 // ─────────────────────────────────────────────────────────────
@@ -47,6 +49,9 @@ private:
 public:
 	/** 플레이어의 인벤토리를 관리하는 컴포넌트를 반환합니다. (아이템 줍기/보관 시 사용) */
 	virtual UECInventoryManagerComponent* GetInventoryManagerComponent() const override;
+
+	/** HUD와 ViewModel이 표시할 QuickBar 컴포넌트를 반환합니다. */
+	UECQuickBarComponent* GetQuickBarComponent() const { return QuickBarComponent; }
 
 protected:
 	/** 플레이어가 보유한 아이템 전체를 관리하는 인벤토리 컴포넌트입니다. */
@@ -76,6 +81,15 @@ protected:
 private:
 	// UI 전담 입력 처리 함수
 	void Input_UIAction(FGameplayTag InputTag);
+
+	/** F5로 플레이어 무적 상태를 토글합니다. */
+	void Input_ToggleInvincibility();
+	void RefreshInvincibilityIndicator();
+
+	bool bInvincibilityEnabled = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UECInvincibilityIndicatorWidget> InvincibilityIndicatorWidget;
 	
 // ─────────────────────────────────────────────────────────────
 // Indicator Component
@@ -92,6 +106,11 @@ private:
 // 인게임 연출 제어
 // ─────────────────────────────────────────────────────────────
 public:
-	/** 영상 재생 시에 플레이어 캐릭터의 입력을 비활성화합니다. */
-	void SetCinematicInputLocked(bool bIsLocked);
+	/** 입력 잠금 사유가 겹쳐도 마지막 잠금이 해제될 때만 실제 입력을 복구합니다. */
+	void SetPlayerInputLocked(bool bIsLocked);
+
+
+private:
+	/** 현재 적용된 플레이어 입력 잠금 개수입니다. */
+	int32 PlayerInputLockCount = 0;
 };

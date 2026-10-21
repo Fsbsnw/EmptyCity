@@ -2,10 +2,95 @@
 #include "Data/Item/ECItemTableRow.h"
 #include "ECInventoryItemDefinition.h"
 #include "ECInventoryItemInstance.h"
+#include "Character/Player/State/ECPlayerState.h"
+#include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
+#include "Engine/World.h"
+#include "GameFramework/Actor.h"
+#include "GameFramework/PlayerController.h"
+#include "Misc/ScopeExit.h"
+#include "Save/ECSaveSubsystem.h"
 #include "Subsystem/ECGameplayMessageSubsystem.h"
 #include "Subsystem/ECItemDataSubsystem.h"
 #include "Subsystem/ECMessageTypes.h"
+
+namespace
+{
+	const FECItemTableRow* FindItemData(
+		const UECInventoryManagerComponent* Inventory,
+		TSubclassOf<UECInventoryItemDefinition> ItemDef)
+	{
+		return Inventory && ItemDef
+			? UECItemDataSubsystem::Get(Inventory).FindItemData(ItemDef)
+			: nullptr;
+	}
+
+	bool IsPlayerOwnedPermanentItem(
+		const UECInventoryManagerComponent* Inventory,
+		TSubclassOf<UECInventoryItemDefinition> ItemDef)
+	{
+		const FECItemTableRow* ItemData = FindItemData(Inventory, ItemDef);
+		return Inventory
+			&& Cast<APlayerController>(Inventory->GetOwner())
+			&& ItemData
+			&& ItemData->bPermanentPlayerItem;
+	}
+
+	float ResolveItemUnitWeight(
+		const UECInventoryManagerComponent* Inventory,
+		const FECItemTableRow* ItemData)
+	{
+		if (!Inventory || !ItemData)
+		{
+			return 0.0f;
+		}
+
+		const float BaseWeight = FMath::Max(0.0f, ItemData->Weight);
+		if (ItemData->ToolUpgradeType != EECWorkbenchUpgradeType::Axe
+			&& ItemData->ToolUpgradeType != EECWorkbenchUpgradeType::Pickaxe
+			&& ItemData->ToolUpgradeType != EECWorkbenchUpgradeType::Weapon)
+		{
+			return BaseWeight;
+		}
+
+		const APlayerController* PlayerController = Cast<APlayerController>(Inventory->GetOwner());
+		const AECPlayerState* PlayerState = PlayerController
+			? PlayerController->GetPlayerState<AECPlayerState>()
+			: nullptr;
+		float UpgradedWeight = 0.0f;
+		return PlayerState
+			&& PlayerState->GetWorkbenchUpgradeValue(ItemData->ToolUpgradeType, TEXT("Weight"), UpgradedWeight)
+			? FMath::Max(0.0f, UpgradedWeight)
+			: BaseWeight;
+	}
+
+	bool BuildAggregatedRequirements(
+		const TArray<FECInventoryItemRequirement>& Requirements,
+		TMap<TSubclassOf<UECInventoryItemDefinition>, int32>& OutAggregatedRequirements)
+	{
+		OutAggregatedRequirements.Reset();
+
+		for (const FECInventoryItemRequirement& Requirement : Requirements)
+		{
+			if (!Requirement.ItemDefinition || Requirement.Count <= 0)
+			{
+				OutAggregatedRequirements.Reset();
+				return false;
+			}
+
+			int32& AggregatedCount = OutAggregatedRequirements.FindOrAdd(Requirement.ItemDefinition);
+			if (Requirement.Count > MAX_int32 - AggregatedCount)
+			{
+				OutAggregatedRequirements.Reset();
+				return false;
+			}
+
+			AggregatedCount += Requirement.Count;
+		}
+
+		return true;
+	}
+}
 
 
 UECInventoryItemInstance* FInventoryList::AddEntry(TSubclassOf<UECInventoryItemDefinition> ItemDef, int32 StackCount, int32 StackMax, int32 MaxSlots)
@@ -63,18 +148,44 @@ UECInventoryManagerComponent::UECInventoryManagerComponent(const FObjectInitiali
 {
 }
 
-UECInventoryItemInstance* UECInventoryManagerComponent::AddItemDefinition(TSubclassOf<UECInventoryItemDefinition> ItemDef, int32 StackCount)
+UECInventoryItemInstance* UECInventoryManagerComponent::AddItemDefinition(
+	TSubclassOf<UECInventoryItemDefinition> ItemDef,
+	const int32 StackCount,
+	const bool bNotifyItemAcquired)
 {
-	if (!CanAddItemDefinition(ItemDef, StackCount)) return nullptr;
 	const FECItemTableRow* ItemData = UECItemDataSubsystem::Get(this).FindItemData(ItemDef);
 	if (!ItemData) return nullptr;
+
+	// 영구 장비는 Pawn이 다시 생성돼 초기 아이템 지급이 재호출되어도 한 개만 유지합니다.
+	if (IsPlayerOwnedPermanentItem(this, ItemDef))
+	{
+		const FInventoryEntry* ExistingEntry = InventoryList.Entries.FindByPredicate(
+			[ItemDef](const FInventoryEntry& Entry)
+			{
+				return IsValid(Entry.Instance)
+					&& Entry.Instance->ItemDef == ItemDef
+					&& Entry.StackCount > 0;
+			});
+		if (ExistingEntry)
+		{
+			return ExistingEntry->Instance;
+		}
+	}
+
+	if (!CanAddItemDefinition(ItemDef, StackCount)) return nullptr;
 
 	UECInventoryItemInstance* Result = InventoryList.AddEntry(ItemDef, StackCount, ItemData->StackMax, MaxInventorySlots);
 	if (!Result) return nullptr;
 	OnInventoryUpdated.Broadcast();
 
 	APlayerController* PC = Cast<APlayerController>(GetOwner());
-	if (!PC) return Result;
+	if (!PC || !bNotifyItemAcquired) return Result;
+
+	const UGameInstance* GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+	const UECSaveSubsystem* SaveSubsystem = GameInstance
+		? GameInstance->GetSubsystem<UECSaveSubsystem>()
+		: nullptr;
+	if (SaveSubsystem && SaveSubsystem->IsLoadInProgress()) return Result;
 		
 	FECNotificationMessage Message;
 	Message.TargetPlayer = PC->PlayerState;
@@ -93,24 +204,103 @@ UECInventoryItemInstance* UECInventoryManagerComponent::AddItemDefinition(TSubcl
 
 void UECInventoryManagerComponent::RemoveItemInstance(UECInventoryItemInstance* ItemInstance)
 {
+	if (!IsValid(ItemInstance)
+		|| IsPlayerOwnedPermanentItem(this, ItemInstance->ItemDef))
+	{
+		return;
+	}
+
 	InventoryList.RemoveEntry(ItemInstance);
 	OnInventoryUpdated.Broadcast();
 }
 
 bool UECInventoryManagerComponent::CanAddItemDefinition(TSubclassOf<UECInventoryItemDefinition> ItemDef, int32 StackCount) const
 {
-	if (!ItemDef || StackCount <= 0 || !GetWorld()) return false;
+	return StackCount > 0 && GetMaxAddableItemCount(ItemDef, StackCount) >= StackCount;
+}
+
+int32 UECInventoryManagerComponent::GetMaxAddableItemCount(
+	TSubclassOf<UECInventoryItemDefinition> ItemDef,
+	const int32 RequestedCount) const
+{
+	if (!ItemDef || RequestedCount <= 0 || !GetWorld())
+	{
+		return 0;
+	}
+
 	const FECItemTableRow* ItemData = UECItemDataSubsystem::Get(this).FindItemData(ItemDef);
-	if (!ItemData) return false;
+	if (!ItemData)
+	{
+		return 0;
+	}
+
+	if (IsPlayerOwnedPermanentItem(this, ItemDef))
+	{
+		const bool bAlreadyOwned = InventoryList.Entries.ContainsByPredicate(
+			[ItemDef](const FInventoryEntry& Entry)
+			{
+				return IsValid(Entry.Instance)
+					&& Entry.Instance->ItemDef == ItemDef
+					&& Entry.StackCount > 0;
+			});
+		if (bAlreadyOwned)
+		{
+			return 0;
+		}
+	}
 
 	const int32 StackMax = FMath::Max(1, ItemData->StackMax);
 	int64 AvailableCapacity = static_cast<int64>(FMath::Max(0, MaxInventorySlots - InventoryList.Entries.Num())) * StackMax;
 	for (const FInventoryEntry& Entry : InventoryList.Entries)
 	{
-		if (IsValid(Entry.Instance) && Entry.Instance->ItemDef == ItemDef && Entry.StackCount < StackMax) AvailableCapacity += StackMax - FMath::Max(0, Entry.StackCount);
+		if (IsValid(Entry.Instance) && Entry.Instance->ItemDef == ItemDef && Entry.StackCount < StackMax)
+		{
+			AvailableCapacity += StackMax - FMath::Max(0, Entry.StackCount);
+		}
 	}
 
-	return AvailableCapacity >= StackCount;
+	int64 AddableCount = FMath::Min<int64>(RequestedCount, AvailableCapacity);
+	if (IsPlayerOwnedPermanentItem(this, ItemDef))
+	{
+		AddableCount = FMath::Min<int64>(AddableCount, 1);
+	}
+
+	const double UnitWeight = static_cast<double>(ResolveItemUnitWeight(this, ItemData));
+	if (MaxInventoryWeight > 0.0f && UnitWeight > UE_SMALL_NUMBER)
+	{
+		const double RemainingWeight = static_cast<double>(MaxInventoryWeight)
+			- static_cast<double>(GetTotalWeight());
+		const int64 AddableByWeight = RemainingWeight > -UE_KINDA_SMALL_NUMBER
+			? FMath::Max<int64>(0, FMath::FloorToInt64(
+				(RemainingWeight + UE_KINDA_SMALL_NUMBER) / UnitWeight))
+			: 0;
+		AddableCount = FMath::Min(AddableCount, AddableByWeight);
+	}
+
+	return static_cast<int32>(FMath::Clamp<int64>(AddableCount, 0, RequestedCount));
+}
+
+int32 UECInventoryManagerComponent::GetItemCountByDefinition(TSubclassOf<UECInventoryItemDefinition> ItemDef) const
+{
+	if (!ItemDef)
+	{
+		return 0;
+	}
+
+	int64 TotalCount = 0;
+	for (const FInventoryEntry& Entry : InventoryList.Entries)
+	{
+		if (IsValid(Entry.Instance) && Entry.Instance->ItemDef == ItemDef)
+		{
+			TotalCount += static_cast<int64>(FMath::Max(0, Entry.StackCount));
+			if (TotalCount >= MAX_int32)
+			{
+				return MAX_int32;
+			}
+		}
+	}
+
+	return static_cast<int32>(TotalCount);
 }
 
 int32 UECInventoryManagerComponent::TransferAllItemsTo(UECInventoryManagerComponent* TargetInventory)
@@ -144,6 +334,13 @@ int32 UECInventoryManagerComponent::TransferAllItemsTo(UECInventoryManagerCompon
 		}
 
 		const TSubclassOf<UECInventoryItemDefinition> ItemDef =	SourceEntry->Instance->ItemDef;
+		const FECItemTableRow* ItemData = FindItemData(this, ItemDef);
+		if (!ItemData
+			|| !ItemData->bCanTransfer
+			|| IsPlayerOwnedPermanentItem(this, ItemDef))
+		{
+			continue;
+		}
 
 		// 기존 CanAddItemDefinition만 사용해서
 		// 들어갈 수 있는 최대 수량을 찾습니다.
@@ -212,6 +409,14 @@ int32 UECInventoryManagerComponent::TransferItemTo(UECInventoryManagerComponent*
 		return 0;
 	}
 
+	const FECItemTableRow* ItemData = FindItemData(this, ItemInstance->ItemDef);
+	if (!ItemData
+		|| !ItemData->bCanTransfer
+		|| IsPlayerOwnedPermanentItem(this, ItemInstance->ItemDef))
+	{
+		return 0;
+	}
+
 	const int32 TransferCount =	FMath::Min(Count, SourceEntry->StackCount);
 
 	if (!TargetInventory->CanAddItemDefinition(ItemInstance->ItemDef, TransferCount))
@@ -253,6 +458,14 @@ int32 UECInventoryManagerComponent::RemoveItemCount(UECInventoryItemInstance* It
 		return 0;
 	}
 
+	const FECItemTableRow* ItemData = FindItemData(this, ItemInstance->ItemDef);
+	if (!ItemData
+		|| !ItemData->bCanDiscard
+		|| IsPlayerOwnedPermanentItem(this, ItemInstance->ItemDef))
+	{
+		return 0;
+	}
+
 	const int32 RemovedCount = FMath::Min(Count, Entry->StackCount);
 	Entry->StackCount -= RemovedCount;
 
@@ -271,54 +484,294 @@ float UECInventoryManagerComponent::GetTotalWeight() const
 	UECItemDataSubsystem& ItemDataSubsystem = UECItemDataSubsystem::Get(this);
 	for (const FInventoryEntry& Entry : InventoryList.Entries)
 	{
-		const FECItemTableRow* ItemData = ItemDataSubsystem.FindItemData(Entry.Instance);
-		TotalWeight += ItemData->Weight * Entry.StackCount;
-	}
-	return TotalWeight;
-}
-
-bool UECInventoryManagerComponent::ConsumeItemsByDefinition(TSubclassOf<UECInventoryItemDefinition> ItemDef, int32 NumToConsume)
-{
-	if (!GetOwner() || NumToConsume <= 0)
-	{
-		return false;
-	}
-
-	// 먼저 보유 총량을 합산한다. 부족하면 아무것도 소모하지 않고 실패시킨다. (부분 소모 방지)
-	int32 TotalAvailable = 0;
-	for (const FInventoryEntry& Entry : InventoryList.Entries)
-	{
-		if (IsValid(Entry.Instance) && Entry.Instance->ItemDef == ItemDef)
-		{
-			TotalAvailable += Entry.StackCount;
-		}
-	}
-
-	if (TotalAvailable < NumToConsume)
-	{
-		return false;
-	}
-
-	// StackCount를 줄여가며 소모하고, 0이 된 엔트리만 목록에서 제거한다. (스택 묶음을 통째로 날리지 않도록)
-	int32 Remaining = NumToConsume;
-	for (auto EntryIt = InventoryList.Entries.CreateIterator(); EntryIt && Remaining > 0; ++EntryIt)
-	{
-		FInventoryEntry& Entry = *EntryIt;
-		if (!IsValid(Entry.Instance) || Entry.Instance->ItemDef != ItemDef)
+		if (!IsValid(Entry.Instance) || Entry.StackCount <= 0)
 		{
 			continue;
 		}
 
-		const int32 ConsumedFromEntry = FMath::Min(Entry.StackCount, Remaining);
-		Entry.StackCount -= ConsumedFromEntry;
-		Remaining -= ConsumedFromEntry;
-
-		if (Entry.StackCount <= 0)
+		const FECItemTableRow* ItemData = ItemDataSubsystem.FindItemData(Entry.Instance);
+		if (ItemData)
 		{
-			EntryIt.RemoveCurrent();
+			TotalWeight += ResolveItemUnitWeight(this, ItemData) * Entry.StackCount;
 		}
 	}
+	return TotalWeight;
+}
+
+float UECInventoryManagerComponent::GetItemUnitWeight(const UECInventoryItemInstance* ItemInstance) const
+{
+	if (!IsValid(ItemInstance))
+	{
+		return 0.0f;
+	}
+
+	const FECItemTableRow* ItemData = UECItemDataSubsystem::Get(this).FindItemData(ItemInstance);
+	return ResolveItemUnitWeight(this, ItemData);
+}
+
+float UECInventoryManagerComponent::GetItemDefinitionUnitWeight(
+	TSubclassOf<UECInventoryItemDefinition> ItemDef) const
+{
+	return ResolveItemUnitWeight(this, FindItemData(this, ItemDef));
+}
+
+void UECInventoryManagerComponent::SetMaxInventoryWeight(float NewMaxInventoryWeight)
+{
+	const float ClampedWeight = FMath::Max(0.0f, NewMaxInventoryWeight);
+	if (FMath::IsNearlyEqual(MaxInventoryWeight, ClampedWeight))
+	{
+		return;
+	}
+
+	MaxInventoryWeight = ClampedWeight;
+	OnMaxInventoryWeightChanged.Broadcast(MaxInventoryWeight);
+}
+
+bool UECInventoryManagerComponent::ConsumeItemsByDefinition(TSubclassOf<UECInventoryItemDefinition> ItemDef, int32 NumToConsume)
+{
+	FECInventoryItemRequirement Requirement;
+	Requirement.ItemDefinition = ItemDef;
+	Requirement.Count = NumToConsume;
+	return ConsumeItemRequirements({ Requirement });
+}
+
+bool UECInventoryManagerComponent::CanConsumeItemRequirements(
+	const TArray<FECInventoryItemRequirement>& Requirements) const
+{
+	if (!GetOwner())
+	{
+		return false;
+	}
+
+	TMap<TSubclassOf<UECInventoryItemDefinition>, int32> AggregatedRequirements;
+	if (!BuildAggregatedRequirements(Requirements, AggregatedRequirements))
+	{
+		return false;
+	}
+
+	for (const TPair<TSubclassOf<UECInventoryItemDefinition>, int32>& Requirement : AggregatedRequirements)
+	{
+		if (IsPlayerOwnedPermanentItem(this, Requirement.Key))
+		{
+			return false;
+		}
+
+		if (GetItemCountByDefinition(Requirement.Key) < Requirement.Value)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool UECInventoryManagerComponent::ConsumeItemRequirements(
+	const TArray<FECInventoryItemRequirement>& Requirements)
+{
+	return ConsumeItemRequirementsWithCommit(Requirements, []() {});
+}
+
+bool UECInventoryManagerComponent::ConsumeItemRequirementsWithCommit(
+	const TArray<FECInventoryItemRequirement>& Requirements,
+	TFunctionRef<void()> CommitCallback)
+{
+	if (!GetOwner() || bRequirementTransactionInProgress)
+	{
+		return false;
+	}
+
+	TMap<TSubclassOf<UECInventoryItemDefinition>, int32> AggregatedRequirements;
+	if (!BuildAggregatedRequirements(Requirements, AggregatedRequirements))
+	{
+		return false;
+	}
+
+	// 변경 전에 모든 재료를 검사한다. 이후 구간은 실패 가능한 외부 호출 없이 직접 수량만 변경한다.
+	for (const TPair<TSubclassOf<UECInventoryItemDefinition>, int32>& Requirement : AggregatedRequirements)
+	{
+		if (IsPlayerOwnedPermanentItem(this, Requirement.Key))
+		{
+			return false;
+		}
+
+		if (GetItemCountByDefinition(Requirement.Key) < Requirement.Value)
+		{
+			return false;
+		}
+	}
+
+	if (AggregatedRequirements.IsEmpty())
+	{
+		TGuardValue<bool> TransactionGuard(bRequirementTransactionInProgress, true);
+		CommitCallback();
+		return true;
+	}
+
+	TGuardValue<bool> TransactionGuard(bRequirementTransactionInProgress, true);
+	for (const TPair<TSubclassOf<UECInventoryItemDefinition>, int32>& Requirement : AggregatedRequirements)
+	{
+		int32 Remaining = Requirement.Value;
+		for (auto EntryIt = InventoryList.Entries.CreateIterator(); EntryIt && Remaining > 0; ++EntryIt)
+		{
+			FInventoryEntry& Entry = *EntryIt;
+			if (!IsValid(Entry.Instance) || Entry.Instance->ItemDef != Requirement.Key)
+			{
+				continue;
+			}
+
+			const int32 ConsumedFromEntry = FMath::Min(FMath::Max(0, Entry.StackCount), Remaining);
+			Entry.StackCount -= ConsumedFromEntry;
+			Remaining -= ConsumedFromEntry;
+
+			if (Entry.StackCount <= 0)
+			{
+				EntryIt.RemoveCurrent();
+			}
+		}
+
+		checkf(Remaining == 0, TEXT("재료 사전 검사 후 인벤토리 수량이 예기치 않게 변경되었습니다."));
+	}
+
+	CommitCallback();
 	OnInventoryUpdated.Broadcast();
+	return true;
+}
+
+bool UECInventoryManagerComponent::CanConsumeItemRequirementsFromInventories(
+	const TArray<UECInventoryManagerComponent*>& Inventories,
+	const TArray<FECInventoryItemRequirement>& Requirements)
+{
+	TArray<UECInventoryManagerComponent*> UniqueInventories;
+	for (UECInventoryManagerComponent* Inventory : Inventories)
+	{
+		if (IsValid(Inventory) && Inventory->GetOwner())
+		{
+			UniqueInventories.AddUnique(Inventory);
+		}
+	}
+
+	if (UniqueInventories.IsEmpty())
+	{
+		return false;
+	}
+
+	TMap<TSubclassOf<UECInventoryItemDefinition>, int32> AggregatedRequirements;
+	if (!BuildAggregatedRequirements(Requirements, AggregatedRequirements))
+	{
+		return false;
+	}
+
+	for (const TPair<TSubclassOf<UECInventoryItemDefinition>, int32>& Requirement : AggregatedRequirements)
+	{
+		int64 AvailableCount = 0;
+		for (const UECInventoryManagerComponent* Inventory : UniqueInventories)
+		{
+			if (IsPlayerOwnedPermanentItem(Inventory, Requirement.Key))
+			{
+				return false;
+			}
+
+			AvailableCount += Inventory->GetItemCountByDefinition(Requirement.Key);
+			if (AvailableCount >= Requirement.Value)
+			{
+				break;
+			}
+		}
+
+		if (AvailableCount < Requirement.Value)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool UECInventoryManagerComponent::ConsumeItemRequirementsFromInventoriesWithCommit(
+	const TArray<UECInventoryManagerComponent*>& Inventories,
+	const TArray<FECInventoryItemRequirement>& Requirements,
+	TFunctionRef<void()> CommitCallback)
+{
+	TArray<UECInventoryManagerComponent*> UniqueInventories;
+	for (UECInventoryManagerComponent* Inventory : Inventories)
+	{
+		if (IsValid(Inventory) && Inventory->GetOwner())
+		{
+			UniqueInventories.AddUnique(Inventory);
+		}
+	}
+
+	if (UniqueInventories.IsEmpty())
+	{
+		return false;
+	}
+
+	for (const UECInventoryManagerComponent* Inventory : UniqueInventories)
+	{
+		if (Inventory->bRequirementTransactionInProgress)
+		{
+			return false;
+		}
+	}
+
+	TMap<TSubclassOf<UECInventoryItemDefinition>, int32> AggregatedRequirements;
+	if (!BuildAggregatedRequirements(Requirements, AggregatedRequirements)
+		|| !CanConsumeItemRequirementsFromInventories(UniqueInventories, Requirements))
+	{
+		return false;
+	}
+
+	for (UECInventoryManagerComponent* Inventory : UniqueInventories)
+	{
+		Inventory->bRequirementTransactionInProgress = true;
+	}
+	ON_SCOPE_EXIT
+	{
+		for (UECInventoryManagerComponent* Inventory : UniqueInventories)
+		{
+			Inventory->bRequirementTransactionInProgress = false;
+		}
+	};
+
+	for (const TPair<TSubclassOf<UECInventoryItemDefinition>, int32>& Requirement : AggregatedRequirements)
+	{
+		int32 Remaining = Requirement.Value;
+		for (UECInventoryManagerComponent* Inventory : UniqueInventories)
+		{
+			for (auto EntryIt = Inventory->InventoryList.Entries.CreateIterator(); EntryIt && Remaining > 0; ++EntryIt)
+			{
+				FInventoryEntry& Entry = *EntryIt;
+				if (!IsValid(Entry.Instance) || Entry.Instance->ItemDef != Requirement.Key)
+				{
+					continue;
+				}
+
+				const int32 ConsumedFromEntry = FMath::Min(FMath::Max(0, Entry.StackCount), Remaining);
+				Entry.StackCount -= ConsumedFromEntry;
+				Remaining -= ConsumedFromEntry;
+
+				if (Entry.StackCount <= 0)
+				{
+					EntryIt.RemoveCurrent();
+				}
+			}
+
+			if (Remaining == 0)
+			{
+				break;
+			}
+		}
+
+		checkf(Remaining == 0, TEXT("재료 사전 검사 후 통합 인벤토리 수량이 예기치 않게 변경되었습니다."));
+	}
+
+	CommitCallback();
+
+	// 통합 재료를 관찰하는 UI가 어느 인벤토리에서 차감됐는지와 무관하게 갱신되도록 모두 알립니다.
+	for (UECInventoryManagerComponent* Inventory : UniqueInventories)
+	{
+		Inventory->OnInventoryUpdated.Broadcast();
+	}
 
 	return true;
 }

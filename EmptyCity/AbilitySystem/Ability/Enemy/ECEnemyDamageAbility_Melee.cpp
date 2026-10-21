@@ -33,6 +33,11 @@ void UECEnemyDamageAbility_Melee::EndAbility(
 		{
 			TraceComponent->EndTrace();
 		}
+
+		if (UWeaponTrailComponent* TrailComponent = AvatarActor->FindComponentByClass<UWeaponTrailComponent>())
+		{
+			TrailComponent->ForceEndTrail();
+		}
 	}
 	
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
@@ -125,7 +130,18 @@ void UECEnemyDamageAbility_Melee::HandleMeleeHit(const FHitResult& HitResult)
 			FGameplayEventData EventData;
 			EventData.Instigator = TargetActor; // 패링한 플레이어
 			EventData.Target = SourceActor;     // 패링당한 적
+			EventData.ContextHandle = SourceASC->MakeEffectContext();
+			EventData.ContextHandle.AddInstigator(SourceActor, SourceActor);
 			EventData.ContextHandle.AddHitResult(HitResult);
+
+			// 상태 처리와 분리된 전용 GameplayCue가 접촉점의 VFX/SFX를 담당합니다.
+			FGameplayCueParameters CueParameters;
+			CueParameters.EffectContext = EventData.ContextHandle;
+			CueParameters.Location = HitResult.ImpactPoint;
+			CueParameters.Normal = HitResult.ImpactNormal;
+			TargetASC->ExecuteGameplayCue(
+				ECGameplayTags::GameplayCue_Combat_ParryImpact,
+				CueParameters);
 
 			// 공격자에게 패링 이벤트 전달
 			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
