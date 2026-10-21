@@ -52,6 +52,8 @@ public:
 	/** DT_Item에서 Item Instance의 Definition을 참조하는 행을 반환합니다. */
 	const FECItemTableRow* FindItemData(const UECInventoryItemInstance* ItemInstance) const;
 
+	/** DT_Item에서 지정한 Axe/Pickaxe 강화 타입의 도구 행을 반환합니다. */
+	const FECItemTableRow* FindFarmingToolData(EECWorkbenchUpgradeType ToolType) const;
 
 // ─────────────────────────────────────────────────────────────
 // Variables
@@ -63,4 +65,7 @@ private:
 
 	/** Item Definition의 Soft Class 경로로 DT_Item RowName을 찾는 역방향 캐시입니다. */
 	TMap<FSoftObjectPath, FName> DefinitionToItemId;
+
+	/** Axe/Pickaxe 강화 타입으로 해당 도구 행을 찾기 위한 캐시입니다. */
+	TMap<EECWorkbenchUpgradeType, FName> FarmingToolTypeToItemId;
 };

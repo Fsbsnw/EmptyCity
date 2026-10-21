@@ -24,6 +24,9 @@ public:
 protected:
 	/** HealthComponent의 StartDeath를 호출합니다. */
 	void StartDeath();
+
+	/** 플레이어 사망이면 공격자 정보를 포함한 게임 흐름 메시지를 발행합니다. */
+	void BroadcastPlayerDeathMessage(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayEventData* TriggerEventData) const;
 	
 	/** HealthComponent의 FinishDeath를 호출합니다. */
 	void FinishDeath();

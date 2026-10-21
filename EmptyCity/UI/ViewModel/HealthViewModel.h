@@ -6,7 +6,8 @@
 #include "UI/ViewModel/ECViewModelBase.h"
 #include "HealthViewModel.generated.h"
 
-struct FGameplayEffectSpec;
+class UAbilitySystemComponent;
+struct FOnAttributeChangeData;
 /**
  * @brief 캐릭터의 체력(Health) 속성을 UI(View)에 바인딩하기 위한 MVVM 뷰모델 클래스
  */
@@ -18,6 +19,7 @@ class EMPTYCITY_API UHealthViewModel : public UECViewModelBase
 public:
 	virtual void BindCallbacksToDependencies(AActor* ContextActor) override;
 	virtual void BroadcastInitialValues() override;
+	virtual void BeginDestroy() override;
 
 	/**
 	 * @brief [예시/미정] 뷰모델이 참조할 GAS 의존성(ASC, AttributeSet)을 주입합니다.
@@ -59,6 +61,9 @@ public:
 	int32 GetMaxHealth() const { return MaxHealth; }
 	void SetMaxHealth(int32 NewMaxHealth);
 
+	FText GetEnemyName() const { return EnemyName; }
+	void SetEnemyName(const FText& NewEnemyName);
+
 	UFUNCTION(BlueprintPure, FieldNotify, Category = "Health")
 	float GetHealthPercent() const;
 	
@@ -74,10 +79,19 @@ private:
 	UPROPERTY(BlueprintReadWrite, FieldNotify, Setter, Getter, meta=(AllowPrivateAccess))
 	int32 MaxHealth;
 
+	UPROPERTY(BlueprintReadWrite, FieldNotify, Setter, Getter, meta=(AllowPrivateAccess))
+	FText EnemyName;
+
 // ============================================================================
 // View 바인딩 델리게이트
 // ============================================================================
-	// 델리게이트 시그니처와 동일한 6개의 매개변수를 갖는 함수 선언
-	void HandleHealthChanged(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec, float EffectMagnitude, float OldValue, float NewValue);
-	void HandleMaxHealthChanged(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec, float EffectMagnitude, float OldValue, float NewValue);
+	void HandleHealthChanged(const FOnAttributeChangeData& ChangeData);
+	void HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData);
+	void UnbindAttributeDelegates();
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
+
+	FDelegateHandle HealthChangedDelegateHandle;
+	FDelegateHandle MaxHealthChangedDelegateHandle;
 };

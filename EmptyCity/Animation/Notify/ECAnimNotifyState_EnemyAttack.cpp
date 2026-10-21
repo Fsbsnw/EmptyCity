@@ -19,7 +19,7 @@ void UECAnimNotifyState_EnemyAttack::NotifyBegin(USkeletalMeshComponent* MeshCom
 	{
 		if (UEnemyMeleeTraceComponent* TraceComponent =	OwnerActor->FindComponentByClass<UEnemyMeleeTraceComponent>())
 		{
-			TraceComponent->BeginTrace(TracePart);
+			TraceComponent->BeginTrace(TracePart, WeaponGroundDecalConfig);
 		}
 	}
 }

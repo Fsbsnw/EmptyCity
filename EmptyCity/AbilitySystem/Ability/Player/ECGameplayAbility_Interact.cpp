@@ -72,7 +72,7 @@ void UECGameplayAbility_Interact::StartLookForInteractables()
 	Query.RequestingAvatar = GetAvatarActorFromActorInfo();
 	Query.RequestingController = Cast<AController>(GetAvatarActorFromActorInfo());
 	
-	UAbilityTask_WaitForInteractableTargets_SingleLineTrace* Task = UAbilityTask_WaitForInteractableTargets_SingleLineTrace::WaitForInteractableTargets_SingleLineTrace(this, Query, FName(TEXT("Interactable_BlockDynamic")), MakeTargetLocationInfoFromOwnerActor(), InteractionScanRange, InteractionScanRate, true);
+	UAbilityTask_WaitForInteractableTargets_SingleLineTrace* Task = UAbilityTask_WaitForInteractableTargets_SingleLineTrace::WaitForInteractableTargets_SingleLineTrace(this, Query, FName(TEXT("Interactable_BlockDynamic")), MakeTargetLocationInfoFromOwnerActor(), InteractionScanRange, InteractionScanRate, false);
 	Task->InteractableObjectsChanged.AddDynamic(this, &ThisClass::UpdateInteractions);
 	Task->ReadyForActivation();
 }
@@ -95,13 +95,18 @@ void UECGameplayAbility_Interact::UpdateInteractions(const TArray<FInteractionOp
 			{
 				AActor* InteractableTargetActor = UInteractionStatics::GetActorFromInteractableTarget(InteractionOption.InteractableTarget);
 
-				TSoftClassPtr<UUserWidget> InteractionWidgetClass = 
-					InteractionOption.InteractionWidgetClass.IsNull() ? DefaultInteractionWidgetClass : InteractionOption.InteractionWidgetClass;
+				// 대상마다 위젯 클래스를 교체하지 않고, 설정된 기본 인디케이터 하나를 공유합니다.
+				// 기본 클래스가 아직 설정되지 않은 기존 데이터만 옵션의 클래스를 호환용으로 사용합니다.
+				TSoftClassPtr<UUserWidget> InteractionWidgetClass =
+					DefaultInteractionWidgetClass.IsNull()
+						? InteractionOption.InteractionWidgetClass
+						: DefaultInteractionWidgetClass;
 
 				UIndicatorDescriptor* Indicator = NewObject<UIndicatorDescriptor>();
 				Indicator->SetDataObject(InteractableTargetActor);
 				Indicator->SetSceneComponent(InteractableTargetActor->GetRootComponent());
 				Indicator->SetIndicatorClass(InteractionWidgetClass);
+				Indicator->SetIndicatorIcon(InteractionOption.InteractionIcon);
 				Indicator->SetMainText(InteractionOption.Text);
 				Indicator->SetSubText(InteractionOption.SubText);
 				IndicatorManager->AddIndicator(Indicator);

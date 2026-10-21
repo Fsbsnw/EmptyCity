@@ -153,6 +153,23 @@ void UECHealthComponent::FinishDeath()
 	OnDeathFinished.Broadcast(Owner);
 }
 
+void UECHealthComponent::ResetDeath()
+{
+	DeathState = EDeathState::NotDead;
+	ClearGameplayTags();
+	RestoreHealthToMax();
+}
+
+void UECHealthComponent::RestoreHealthToMax()
+{
+	if (ASC && HealthSet)
+	{
+		ASC->SetNumericAttributeBase(
+			UECHealthSet::GetHealthAttribute(),
+			HealthSet->GetMaxHealth());
+	}
+}
+
 void UECHealthComponent::ClearGameplayTags()
 {
 	if (ASC)

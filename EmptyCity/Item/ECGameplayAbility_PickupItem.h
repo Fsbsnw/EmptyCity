@@ -5,6 +5,7 @@
 #include "ECGameplayAbility_PickupItem.generated.h"
 
 class IPickupable;
+enum class EECPickupResult : uint8;
 /**
  * 떨어진 아이템(AECPickupableItem)을 주워 인벤토리에 보관하는 어빌리티입니다.
  *
@@ -32,7 +33,7 @@ public:
 // ─────────────────────────────────────────────────────────────
 protected:
 	/** 캐싱해 둔 Pickupable 대상의 내용물을 플레이어 인벤토리에 추가합니다. */
-	bool PickUp();
+	EECPickupResult PickUp();
 
 	
 // ─────────────────────────────────────────────────────────────

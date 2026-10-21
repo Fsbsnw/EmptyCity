@@ -10,6 +10,7 @@
 class SWidget;
 class UIndicatorDescriptor;
 class UECIndicatorManagerComponent;
+class UTexture2D;
 class UUserWidget;
 struct FFrame;
 struct FSceneViewProjectionData;
@@ -98,6 +99,16 @@ public:
 	void SetIndicatorClass(TSoftClassPtr<UUserWidget> InIndicatorWidgetClass)
 	{
 		IndicatorWidgetClass = InIndicatorWidgetClass;
+	}
+
+	/** 공통 인디케이터 위젯에 표시할 대상별 아이콘을 반환합니다. */
+	UFUNCTION(BlueprintCallable)
+	TSoftObjectPtr<UTexture2D> GetIndicatorIcon() const { return IndicatorIcon; }
+	/** 공통 인디케이터 위젯에 표시할 대상별 아이콘을 설정합니다. */
+	UFUNCTION(BlueprintCallable)
+	void SetIndicatorIcon(TSoftObjectPtr<UTexture2D> InIndicatorIcon)
+	{
+		IndicatorIcon = InIndicatorIcon;
 	}
 
 	/** 인디케이터에 표시할 기본 텍스트를 반환합니다. */
@@ -336,6 +347,9 @@ private:
 	
 	UPROPERTY()
 	TSoftClassPtr<UUserWidget> IndicatorWidgetClass;
+
+	UPROPERTY()
+	TSoftObjectPtr<UTexture2D> IndicatorIcon;
 	
 	UPROPERTY()
 	TWeakObjectPtr<UECIndicatorManagerComponent> ManagerPtr;

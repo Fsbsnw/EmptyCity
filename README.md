@@ -5,7 +5,8 @@
 AI의 상태 판단부터 Gameplay Ability 실행, 전투 판정과 피드백까지 연결하고,
 GameplayTag 기반 UI 관리와 MVVM 구조로 게임플레이 데이터와 화면 로직을 분리했습니다.
 
-<!-- MEDIA_TODO: 01-hero.gif | 전투, 패링, 맵, 인벤토리를 15~20초 안에 보여주는 대표 GIF -->
+
+
 
 ## 프로젝트 목차
 
@@ -15,6 +16,8 @@ GameplayTag 기반 UI 관리와 MVVM 구조로 게임플레이 데이터와 화�
 4. [UI Architecture](#2-ui-architecture)
 5. [Event-driven Gameplay UI](#3-event-driven-gameplay-ui)
 6. [Additional Implementations](#additional-implementations)
+
+
 
 ## 프로젝트 개요
 
@@ -36,6 +39,8 @@ GameplayTag 기반 UI 관리와 MVVM 구조로 게임플레이 데이터와 화�
 ## 1. Enemy AI & Combat
 
 ### StateTree 기반 적 행동 구조
+
+<img width="1072" height="685" alt="Image" src="https://github.com/user-attachments/assets/50c5ad31-b7a1-4443-85cb-052e17b27ea3" />
 
 AI Controller는 감지 정보와 전투 대상을 관리하고, StateTree는 순찰·추적·공격과 상태 전환을 담당하도록 책임을 나눴습니다.
 빙의한 적 캐릭터의 StateTree 에셋을 런타임에 적용하고, 공통 행동은 재사용 가능한 노드로 분리했습니다.

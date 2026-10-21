@@ -6,59 +6,75 @@
 #include "UI/Widget/ECUserWidget.h"
 #include "ECPlayerInventoryWidget.generated.h"
 
-class UOverlay;
 class UECInventoryItemInstance;
-class UButton;
-struct FInventoryEntry;
-class UECItemDetailWidget;
+class UECItemQuantitySelectorWidget;
 class UECInventorySlotWidget;
-class UWrapBox;
-class UECInventoryManagerComponent;
+class UECItemDetailWidget;
 class UInventoryViewModel;
-/**
- * 
- */
+class UOverlay;
+class UScrollBox;
+class UWrapBox;
+struct FInventoryEntry;
+
+/** 플레이어의 단독 인벤토리 화면을 관리합니다. */
 UCLASS()
 class EMPTYCITY_API UECPlayerInventoryWidget : public UECUserWidget
 {
 	GENERATED_BODY()
-	
+
 public:
 	virtual void InjectViewModel(UMVVMViewModelBase* TargetViewModel) override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	virtual void OnWidgetOpened_Implementation() override;
-	
-	/** 인벤토리가 변경될 때마다 위젯을 업데이트 합니다. */
+
+	/** 플레이어 인벤토리가 변경될 때마다 위젯을 업데이트합니다. */
 	void RefreshInventoryUI();
 
-private:
-	enum class ESelectedInventorySource : uint8
-	{
-		None,
-		Player,
-		Storage
-	};
+protected:
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 
-	/** 지정한 WrapBox에 인벤토리 엔트리를 표시합니다. */
-	void RefreshInventoryWrapBox(UWrapBox* TargetWrapBox, const TArray<FInventoryEntry>& Entries, bool bCanMoveToContainer);
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UScrollBox> InventoryScrollBox_Player;
+
+	/** Tool과 Weapon을 함께 표시하는 카테고리 */
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UWrapBox> InventoryWrapBox_Player_ToolWeapon;
+
+	/** Stimpak과 Stimpill을 표시하는 카테고리 */
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UWrapBox> InventoryWrapBox_Player_SurvivalKit;
+
+	/** 나머지 일반 아이템을 표시하는 카테고리 */
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UWrapBox> InventoryWrapBox_Player_Item;
+
+	/** G키로 버릴 수량을 선택하는 공통 위젯입니다. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UECItemQuantitySelectorWidget> ItemQuantitySelector;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UOverlay> Overlay_ItemDetail;
+
+	/** 선택한 아이템의 공통 상세 정보를 표시합니다. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UECItemDetailWidget> ItemDetailWidget;
+
+	/** 인벤토리 슬롯 위젯에 사용할 블루프린트 클래스 */
+	UPROPERTY(EditDefaultsOnly, Category = "Inventory")
+	TSubclassOf<UECInventorySlotWidget> SlotWidgetClass;
+
+private:
+	void RefreshInventoryWrapBox(UWrapBox* TargetWrapBox, const TArray<FInventoryEntry>& Entries);
 	void RefreshSelectionVisuals();
-	void UnbindInventoryViewModels();
+	void UnbindInventoryViewModel();
 
 	void HandleInventorySlotClicked(UECInventoryItemInstance* ItemInstance);
-	void HandleContainerInventorySlotClicked(UECInventoryItemInstance* ItemInstance);
-	void HandleInventorySlotRightClicked(UECInventoryItemInstance* ItemInstance);
-	void HandleStorageSlotRightClicked(UECInventoryItemInstance* ItemInstance);
 	int32 GetSelectedItemStackCount() const;
+	int32 GetSelectedActionQuantity() const;
 
-	UFUNCTION()
-	void HandleMoveAllItemsToContainerClicked();
-	
-	UFUNCTION()
-	void HandleMoveSelectedItemToContainerClicked();
-
-	UFUNCTION()
-	void HandleDiscardSelectedItemClicked();
+	void HandleDiscardSelectedItem();
 
 	void ClearSelectedItem();
 
@@ -67,39 +83,4 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UInventoryViewModel> CachedPlayerInventoryViewModel;
-
-	UPROPERTY()
-	TObjectPtr<UInventoryViewModel> CachedStorageInventoryViewModel;
-
-	ESelectedInventorySource SelectedInventorySource = ESelectedInventorySource::None;
-
-protected:
-	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UWrapBox> InventoryWrapBox_Player;
-
-	/** 컨테이너 인벤토리 */
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UWrapBox> InventoryWrapBox_Container;
-
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> Button_MoveAllItemsToContainer;
-
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-	TObjectPtr<UButton>	Button_MoveSelectedItemToContainer;
-
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> Button_DiscardSelectedItem;
-
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-	TObjectPtr<UOverlay> Overlay_ItemDetail;
-	
-	/** 선택한 아이템의 공통 상세 정보를 표시합니다. */
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
-	TObjectPtr<UECItemDetailWidget> ItemDetailWidget;
-
-	/** 인벤토리 슬롯 위젯에 사용할 블루프린트 클래스 */
-	UPROPERTY(EditDefaultsOnly, Category = "Inventory")
-	TSubclassOf<UECInventorySlotWidget> SlotWidgetClass;
 };

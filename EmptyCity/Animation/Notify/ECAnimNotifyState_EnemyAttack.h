@@ -10,7 +10,7 @@
 /**
  * 
  */
-UCLASS()
+UCLASS(meta=(DisplayName="EC Enemy Attack Trace Window"))
 class EMPTYCITY_API UECAnimNotifyState_EnemyAttack : public UAnimNotifyState
 {
 	GENERATED_BODY()
@@ -25,4 +25,9 @@ private:
 	/** 이 Notify 구간에서 판정할 공격 부위입니다. */
 	UPROPERTY(EditAnywhere, Category="Trace", meta=(AllowPrivateAccess="true"))
 	EEnemyMeleeTracePart TracePart = EEnemyMeleeTracePart::Weapon;
+
+	/** 이 공격 애니메이션의 무기가 지면에 닿았을 때 생성할 데칼 설정입니다. */
+	UPROPERTY(EditAnywhere, Category="Weapon Ground Decal",
+		meta=(EditCondition="TracePart == EEnemyMeleeTracePart::Weapon", EditConditionHides, AllowPrivateAccess="true"))
+	FEnemyWeaponGroundDecalConfig WeaponGroundDecalConfig;
 };

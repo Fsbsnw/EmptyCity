@@ -6,7 +6,8 @@
 #include "UI/ViewModel/ECViewModelBase.h"
 #include "StaminaViewModel.generated.h"
 
-struct FGameplayEffectSpec;
+class UAbilitySystemComponent;
+struct FOnAttributeChangeData;
 /**
  * @brief 캐릭터의 스태미나(Stamina) 속성을 UI(View)에 바인딩하기 위한 MVVM 뷰모델 클래스
  */
@@ -17,6 +18,7 @@ class EMPTYCITY_API UStaminaViewModel : public UECViewModelBase
 public:
 	virtual void BindCallbacksToDependencies(AActor* ContextActor) override;
 	virtual void BroadcastInitialValues() override;
+	virtual void BeginDestroy() override;
 
 public: 
 // ============================================================================
@@ -47,6 +49,13 @@ private:
 // View 바인딩 델리게이트
 // ============================================================================
 	
-	void HandleStaminaChanged(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec, float EffectMagnitude, float OldValue, float NewValue);
-	void HandleMaxStaminaChanged(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec, float EffectMagnitude, float OldValue, float NewValue);
+	void HandleStaminaChanged(const FOnAttributeChangeData& Data);
+	void HandleMaxStaminaChanged(const FOnAttributeChangeData& Data);
+	void UnbindAttributeDelegates();
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+
+	FDelegateHandle StaminaChangedHandle;
+	FDelegateHandle MaxStaminaChangedHandle;
 };

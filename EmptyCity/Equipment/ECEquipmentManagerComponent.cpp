@@ -74,7 +74,9 @@ UECEquipmentManagerComponent::UECEquipmentManagerComponent(const FObjectInitiali
 {
 }
 
-UECEquipmentInstance* UECEquipmentManagerComponent::EquipItem(TSubclassOf<UECEquipmentDefinition> EquipmentDefinition)
+UECEquipmentInstance* UECEquipmentManagerComponent::EquipItem(
+	TSubclassOf<UECEquipmentDefinition> EquipmentDefinition,
+	UObject* Instigator)
 {
 	if (!EquipmentDefinition)
 	{
@@ -86,6 +88,9 @@ UECEquipmentInstance* UECEquipmentManagerComponent::EquipItem(TSubclassOf<UECEqu
 	{
 		return nullptr;
 	}
+
+	// OnEquipped에서 무기 데이터와 강화 외형을 즉시 조회할 수 있도록 먼저 설정합니다.
+	Result->Instigator = Instigator;
 
 	if (UECWeaponInstance* NewWeapon = Cast<UECWeaponInstance>(Result))
 	{

@@ -52,7 +52,7 @@ protected:
 	void DisableMovementAndCollision();
 	
 	/** 사망 연출을 출력하는 함수입니다. */
-	void StartDeathProcess();
+	virtual void StartDeathProcess();
 	
 	/** OnDeathFinished에서 한 틱 후 호출하는 함수입니다. 실질적인 Destory는 여기서 담당합니다. */
 	void DestroyDueToDeath();

@@ -100,8 +100,10 @@ public:
 // Equip / Unequip
 // ─────────────────────────────────────────────────────────────
 public:
-	/** 설계도를 받아 장비를 장착하고, 생성된 인스턴스를 반환합니다. (내부에서 EquipmentList에 엔트리 추가 후 OnEquipped 발행) */
-	UECEquipmentInstance* EquipItem(TSubclassOf<UECEquipmentDefinition> EquipmentDefinition);
+	/** 설계도와 원본 아이템을 받아 장비를 장착하고, 생성된 인스턴스를 반환합니다. */
+	UECEquipmentInstance* EquipItem(
+		TSubclassOf<UECEquipmentDefinition> EquipmentDefinition,
+		UObject* Instigator = nullptr);
 
 	/** 장착된 인스턴스를 해제합니다. (OnUnequipped 발행 후 EquipmentList에서 엔트리 제거) */
 	void UnequipItem(UECEquipmentInstance* ItemInstance);

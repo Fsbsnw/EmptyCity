@@ -6,23 +6,44 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attribute/ECHealthSet.h"
+#include "Character/Enemy/ECEnemyCharacterBase.h"
+#include "GameplayEffectTypes.h"
+#include "Subsystem/ECEnemyDataSubsystem.h"
 
 void UHealthViewModel::BindCallbacksToDependencies(AActor* ContextActor)
 {
-	if (!ContextActor)
+	UnbindAttributeDelegates();
+	Super::BindCallbacksToDependencies(ContextActor);
+
+	if (ContextActor && ContextActor->IsA<AECEnemyCharacterBase>())
 	{
-		return;
+		SetEnemyName(UECEnemyDataSubsystem::Get(ContextActor).FindEnemyDisplayName(ContextActor->GetClass()));
+	}
+	else
+	{
+		SetEnemyName(FText::GetEmpty());
 	}
 	
-	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(ContextActor);
+	UAbilitySystemComponent* ASC = ContextActor
+		? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(ContextActor)
+		: nullptr;
+	if (!ASC)
+	{
+		ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPlayerPawn());
+	}
 
 	if (ASC)
 	{
 		const UECHealthSet* HealthSet = ASC->GetSet<UECHealthSet>();
 		if (HealthSet)
 		{
-			HealthSet->OnHealthChanged.AddUObject(this, &ThisClass::HandleHealthChanged);
-			HealthSet->OnMaxHealthChanged.AddUObject(this, &ThisClass::HandleMaxHealthChanged);
+			BoundAbilitySystemComponent = ASC;
+			HealthChangedDelegateHandle = ASC
+				->GetGameplayAttributeValueChangeDelegate(UECHealthSet::GetHealthAttribute())
+				.AddUObject(this, &ThisClass::HandleHealthChanged);
+			MaxHealthChangedDelegateHandle = ASC
+				->GetGameplayAttributeValueChangeDelegate(UECHealthSet::GetMaxHealthAttribute())
+				.AddUObject(this, &ThisClass::HandleMaxHealthChanged);
 			
 			SetCurrentHealth(FMath::RoundToInt(HealthSet->GetHealth()));
 			SetMaxHealth(FMath::RoundToInt(HealthSet->GetMaxHealth()));
@@ -32,9 +53,19 @@ void UHealthViewModel::BindCallbacksToDependencies(AActor* ContextActor)
 
 void UHealthViewModel::BroadcastInitialValues()
 {
+	Super::BroadcastInitialValues();
+
 	// 아무 조건 없이 값의 현재 상태를 알립니다.
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(CurrentHealth);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(MaxHealth);
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(EnemyName);
+	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetHealthPercent);
+}
+
+void UHealthViewModel::BeginDestroy()
+{
+	UnbindAttributeDelegates();
+	Super::BeginDestroy();
 }
 
 
@@ -50,7 +81,15 @@ void UHealthViewModel::SetCurrentHealth(int32 NewHealth)
 
 void UHealthViewModel::SetMaxHealth(int32 NewMaxHealth)
 {
-	UE_MVVM_SET_PROPERTY_VALUE(MaxHealth, NewMaxHealth);
+	if (UE_MVVM_SET_PROPERTY_VALUE(MaxHealth, NewMaxHealth))
+	{
+		UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(GetHealthPercent);
+	}
+}
+
+void UHealthViewModel::SetEnemyName(const FText& NewEnemyName)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(EnemyName, NewEnemyName);
 }
 
 float UHealthViewModel::GetHealthPercent() const
@@ -64,14 +103,33 @@ float UHealthViewModel::GetHealthPercent() const
 	return static_cast<float>(CurrentHealth) / static_cast<float>(MaxHealth);
 }
 
-void UHealthViewModel::HandleHealthChanged(AActor* EffectInstigator, AActor* EffectCauser,
-	const FGameplayEffectSpec* EffectSpec, float EffectMagnitude, float OldValue, float NewValue)
+void UHealthViewModel::HandleHealthChanged(const FOnAttributeChangeData& ChangeData)
 {
-	SetCurrentHealth(FMath::RoundToInt(NewValue));
+	SetCurrentHealth(FMath::RoundToInt(ChangeData.NewValue));
 }
 
-void UHealthViewModel::HandleMaxHealthChanged(AActor* EffectInstigator, AActor* EffectCauser,
-	const FGameplayEffectSpec* EffectSpec, float EffectMagnitude, float OldValue, float NewValue)
+void UHealthViewModel::HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData)
 {
-	SetMaxHealth(FMath::RoundToInt(NewValue));
+	SetMaxHealth(FMath::RoundToInt(ChangeData.NewValue));
+}
+
+void UHealthViewModel::UnbindAttributeDelegates()
+{
+	if (UAbilitySystemComponent* ASC = BoundAbilitySystemComponent.Get())
+	{
+		if (HealthChangedDelegateHandle.IsValid())
+		{
+			ASC->GetGameplayAttributeValueChangeDelegate(UECHealthSet::GetHealthAttribute())
+				.Remove(HealthChangedDelegateHandle);
+		}
+		if (MaxHealthChangedDelegateHandle.IsValid())
+		{
+			ASC->GetGameplayAttributeValueChangeDelegate(UECHealthSet::GetMaxHealthAttribute())
+				.Remove(MaxHealthChangedDelegateHandle);
+		}
+	}
+
+	BoundAbilitySystemComponent.Reset();
+	HealthChangedDelegateHandle.Reset();
+	MaxHealthChangedDelegateHandle.Reset();
 }

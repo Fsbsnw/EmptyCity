@@ -33,6 +33,12 @@ public:
 	/** 데미지 처리 구간에서 히트 스탑을 처리합니다. */
 	void PlayHitStop(float TimeDuration = 0.3f, float TimeDilation = 0.05f);
 
+	/** 피격 애니메이션 Notify에서 실행할 히트 스탑 값을 보관합니다. */
+	void QueueHitStop(float TimeDuration, float TimeDilation);
+
+	/** 피격 애니메이션 Notify 시점에 대기 중인 히트 스탑을 실행합니다. */
+	void PlayQueuedHitStop();
+
 	UPROPERTY(EditAnywhere) // 블루프린트 테스트용
 	bool bCanPlayHitStop = true;
 
@@ -43,12 +49,16 @@ private:
 	/** 다단 히트 시 타이머를 덮어씌우기 위한 타이머 핸들 */
 	FTimerHandle HitStopTimerHandle;
 
+	float QueuedHitStopTimeDuration = 0.0f;
+	float QueuedHitStopTimeDilation = 1.0f;
+	bool bHasQueuedHitStop = false;
+
 // ─────────────────────────────────────────────────────────────
 // Hit Reaction Animation
 // ─────────────────────────────────────────────────────────────
 public:
 	/** 공격이 날아온 위치를 기준으로 방향별 피격 몽타주를 재생합니다. */
-	void PlayWeakHitReaction(const FVector& HitSourceLocation = FVector::ZeroVector);
+	bool PlayWeakHitReaction(const FVector& HitSourceLocation = FVector::ZeroVector);
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Combat | Hit Reaction")

@@ -40,12 +40,68 @@ bool UWeaponTrailComponent::BeginTrail()
 {
 	if (IsTrailActive())
 	{
+		if (ActiveSourceMode != ETrailSourceMode::ComponentDefault)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[%s] 이미 다른 소스의 WeaponTrail이 활성화되어 새 요청을 시작하지 않았습니다."),
+				*GetNameSafe(GetOwner()));
+			return false;
+		}
+
 		++ActiveTrailRequestCount;
 		return true;
 	}
 
-	if (!ResolveSourceMesh() || !EnsureTrailEffectComponent() || !UpdateTrailParameters())
+	UMeshComponent* DefaultSourceMesh = nullptr;
+	if (!ResolveDefaultSourceMesh(DefaultSourceMesh))
 	{
+		return false;
+	}
+
+	return BeginTrailInternal(ETrailSourceMode::ComponentDefault, DefaultSourceMesh, StartSocket, EndSocket);
+}
+
+bool UWeaponTrailComponent::BeginTrailFromMesh(UMeshComponent* InSourceMesh, FName InStartSocket, FName InEndSocket)
+{
+	return BeginTrailInternal(ETrailSourceMode::ExplicitMesh, InSourceMesh, InStartSocket, InEndSocket);
+}
+
+bool UWeaponTrailComponent::BeginTrailInternal(ETrailSourceMode InSourceMode, UMeshComponent* InSourceMesh,
+	FName InStartSocket, FName InEndSocket)
+{
+	if (!IsValid(InSourceMesh) || InStartSocket.IsNone() || InEndSocket.IsNone() ||
+		!InSourceMesh->DoesSocketExist(InStartSocket) || !InSourceMesh->DoesSocketExist(InEndSocket))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[%s] WeaponTrail 소스로 지정한 Mesh 또는 본/소켓이 유효하지 않습니다."),
+			*GetNameSafe(GetOwner()));
+		return false;
+	}
+
+	if (IsTrailActive())
+	{
+		if (!IsActiveSource(InSourceMode, InSourceMesh, InStartSocket, InEndSocket))
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[%s] 이미 다른 소스의 WeaponTrail이 활성화되어 새 요청을 시작하지 않았습니다."),
+				*GetNameSafe(GetOwner()));
+			return false;
+		}
+
+		++ActiveTrailRequestCount;
+		return true;
+	}
+
+	CachedSourceMesh = InSourceMesh;
+	ActiveSourceMode = InSourceMode;
+	ActiveStartSocket = InStartSocket;
+	ActiveEndSocket = InEndSocket;
+
+	if (!EnsureTrailEffectComponent() || !UpdateTrailParameters())
+	{
+		CachedSourceMesh.Reset();
+		ActiveSourceMode = ETrailSourceMode::None;
+		ActiveStartSocket = NAME_None;
+		ActiveEndSocket = NAME_None;
 		return false;
 	}
 
@@ -57,13 +113,34 @@ bool UWeaponTrailComponent::BeginTrail()
 
 void UWeaponTrailComponent::EndTrail()
 {
-	if (!IsTrailActive())
+	if (!IsTrailActive() || ActiveSourceMode != ETrailSourceMode::ComponentDefault)
 	{
 		return;
 	}
 
+	EndActiveTrailRequest();
+}
+
+void UWeaponTrailComponent::EndTrailFromMesh(UMeshComponent* InSourceMesh, FName InStartSocket, FName InEndSocket)
+{
+	EndTrailInternal(ETrailSourceMode::ExplicitMesh, InSourceMesh, InStartSocket, InEndSocket);
+}
+
+void UWeaponTrailComponent::EndTrailInternal(ETrailSourceMode InSourceMode, UMeshComponent* InSourceMesh,
+	FName InStartSocket, FName InEndSocket)
+{
+	if (!IsTrailActive() || !IsActiveSource(InSourceMode, InSourceMesh, InStartSocket, InEndSocket))
+	{
+		return;
+	}
+
+	EndActiveTrailRequest();
+}
+
+void UWeaponTrailComponent::EndActiveTrailRequest()
+{
 	--ActiveTrailRequestCount;
-	if (ActiveTrailRequestCount == 0)
+	if (!IsTrailActive())
 	{
 		StopTrailEffect();
 	}
@@ -75,8 +152,10 @@ void UWeaponTrailComponent::ForceEndTrail()
 	StopTrailEffect();
 }
 
-bool UWeaponTrailComponent::ResolveSourceMesh()
+bool UWeaponTrailComponent::ResolveDefaultSourceMesh(UMeshComponent*& OutSourceMesh) const
 {
+	OutSourceMesh = nullptr;
+
 	AActor* OwnerActor = GetOwner();
 	if (!IsValid(OwnerActor))
 	{
@@ -87,7 +166,7 @@ bool UWeaponTrailComponent::ResolveSourceMesh()
 	{
 		if (ReferencedMesh->DoesSocketExist(StartSocket) && ReferencedMesh->DoesSocketExist(EndSocket))
 		{
-			CachedSourceMesh = ReferencedMesh;
+			OutSourceMesh = ReferencedMesh;
 			return true;
 		}
 	}
@@ -99,7 +178,7 @@ bool UWeaponTrailComponent::ResolveSourceMesh()
 	{
 		if (IsValid(MeshComponent) && MeshComponent->DoesSocketExist(StartSocket) && MeshComponent->DoesSocketExist(EndSocket))
 		{
-			CachedSourceMesh = MeshComponent;
+			OutSourceMesh = MeshComponent;
 			return true;
 		}
 	}
@@ -108,22 +187,51 @@ bool UWeaponTrailComponent::ResolveSourceMesh()
 	return false;
 }
 
+UNiagaraSystem* UWeaponTrailComponent::GetTrailSystemForSource(ETrailSourceMode InSourceMode) const
+{
+	switch (InSourceMode)
+	{
+	case ETrailSourceMode::ComponentDefault:
+		return WeaponTrailSystem;
+
+	case ETrailSourceMode::ExplicitMesh:
+		return KickTrailSystem;
+
+	default:
+		return nullptr;
+	}
+}
+
 bool UWeaponTrailComponent::EnsureTrailEffectComponent()
 {
-	if (IsValid(TrailEffectComponent))
-	{
-		return true;
-	}
-
 	UMeshComponent* SourceMesh = CachedSourceMesh.Get();
-	if (!IsValid(TrailSystem) || !IsValid(SourceMesh))
+	UNiagaraSystem* DesiredTrailSystem = GetTrailSystemForSource(ActiveSourceMode);
+	if (!IsValid(DesiredTrailSystem) || !IsValid(SourceMesh))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s] WeaponTrail NiagaraSystem 또는 SourceMesh가 설정되지 않았습니다."), *GetNameSafe(GetOwner()));
+		UE_LOG(LogTemp, Warning,
+			TEXT("[%s] 현재 트레일 소스에 사용할 NiagaraSystem 또는 SourceMesh가 설정되지 않았습니다."),
+			*GetNameSafe(GetOwner()));
 		return false;
 	}
 
+	if (IsValid(TrailEffectComponent))
+	{
+		if (TrailEffectComponent->GetAsset() != DesiredTrailSystem)
+		{
+			TrailEffectComponent->Deactivate();
+			TrailEffectComponent->SetAsset(DesiredTrailSystem);
+		}
+
+		if (TrailEffectComponent->GetAttachParent() != SourceMesh)
+		{
+			TrailEffectComponent->AttachToComponent(SourceMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+		}
+
+		return true;
+	}
+
 	TrailEffectComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
-		TrailSystem,
+		DesiredTrailSystem,
 		SourceMesh,
 		NAME_None,
 		FVector::ZeroVector,
@@ -145,15 +253,24 @@ bool UWeaponTrailComponent::UpdateTrailParameters()
 		return false;
 	}
 
-	if (!SourceMesh->DoesSocketExist(StartSocket) || !SourceMesh->DoesSocketExist(EndSocket))
+	if (!SourceMesh->DoesSocketExist(ActiveStartSocket) || !SourceMesh->DoesSocketExist(ActiveEndSocket))
 	{
 		return false;
 	}
 
-	// Ribbon 파라미터에 무기 소켓 위치값을 전달합니다.
-	TrailEffectComponent->SetVariablePosition(TrailStartParameter, SourceMesh->GetSocketLocation(StartSocket));
-	TrailEffectComponent->SetVariablePosition(TrailEndParameter, SourceMesh->GetSocketLocation(EndSocket));
+	// Ribbon 파라미터에 선택한 메시의 본/소켓 위치값을 전달합니다.
+	TrailEffectComponent->SetVariablePosition(TrailStartParameter, SourceMesh->GetSocketLocation(ActiveStartSocket));
+	TrailEffectComponent->SetVariablePosition(TrailEndParameter, SourceMesh->GetSocketLocation(ActiveEndSocket));
 	return true;
+}
+
+bool UWeaponTrailComponent::IsActiveSource(ETrailSourceMode InSourceMode, UMeshComponent* InSourceMesh,
+	FName InStartSocket, FName InEndSocket) const
+{
+	return ActiveSourceMode == InSourceMode &&
+		CachedSourceMesh.Get() == InSourceMesh &&
+		ActiveStartSocket == InStartSocket &&
+		ActiveEndSocket == InEndSocket;
 }
 
 void UWeaponTrailComponent::StopTrailEffect()
@@ -164,4 +281,9 @@ void UWeaponTrailComponent::StopTrailEffect()
 	{
 		TrailEffectComponent->Deactivate();
 	}
+
+	CachedSourceMesh.Reset();
+	ActiveSourceMode = ETrailSourceMode::None;
+	ActiveStartSocket = NAME_None;
+	ActiveEndSocket = NAME_None;
 }

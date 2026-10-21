@@ -36,6 +36,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "변수|상호작용")
 	FInteractionOption Option;
 
+	/** 교환소에서 이 아이템을 보유 중이면 일반 안내 대신 제출 안내를 표시합니다. */
+	UPROPERTY(EditDefaultsOnly, Category = "변수|상호작용|엔딩")
+	FName EndingSubmissionItemId = TEXT("Cylinder");
+
+	/** 엔딩 제출 아이템을 보유했을 때 인디케이터에 표시할 문구입니다. */
+	UPROPERTY(EditDefaultsOnly, Category = "변수|상호작용|엔딩")
+	FText EndingSubmissionInteractionText;
+
 // ─────────────────────────────────────────────────────────────
 // Interaction Function
 // ─────────────────────────────────────────────────────────────
@@ -88,6 +96,9 @@ protected:
 private:
 	/** 게임 시작 시 InitialInventoryItems를 인벤토리에 등록 */
 	void AddInitialInventory();
+
+	/** 교환소를 바라보는 플레이어가 엔딩 제출 아이템을 보유했는지 확인합니다. */
+	bool HasEndingSubmissionItem(const FInteractionQuery& InteractQuery) const;
 
 	/** 현재 상호작용을 진행 중인 로컬 플레이어입니다. */
 	TWeakObjectPtr<APlayerController> ActivePlayerController;

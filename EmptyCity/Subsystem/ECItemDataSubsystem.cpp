@@ -13,6 +13,7 @@ void UECItemDataSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 	DefinitionToItemId.Reset();
+	FarmingToolTypeToItemId.Reset();
 
 	const UECItemSettings* Settings = GetDefault<UECItemSettings>();
 	if (!Settings || Settings->ItemDataTable.IsNull())
@@ -52,6 +53,23 @@ void UECItemDataSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		}
 
 		DefinitionToItemId.Add(DefinitionPath, RowPair.Key);
+
+		const bool bIsFarmingTool =
+			ItemData->ToolUpgradeType == EECWorkbenchUpgradeType::Axe ||
+			ItemData->ToolUpgradeType == EECWorkbenchUpgradeType::Pickaxe;
+		if (bIsFarmingTool)
+		{
+			if (const FName* ExistingItemId = FarmingToolTypeToItemId.Find(ItemData->ToolUpgradeType))
+			{
+				UE_LOG(LogECItemData, Error,
+					TEXT("동일한 파밍 도구 타입을 사용하는 DT_Item 행이 중복되었습니다: %s, %s"),
+					*ExistingItemId->ToString(), *RowPair.Key.ToString());
+			}
+			else
+			{
+				FarmingToolTypeToItemId.Add(ItemData->ToolUpgradeType, RowPair.Key);
+			}
+		}
 	}
 
 	UE_LOG(LogECItemData, Log, TEXT("Item Data Table 로드 완료: %s (%d개 행, %d개 Definition)"), *GetNameSafe(ItemDataTable), ItemDataTable->GetRowMap().Num(), DefinitionToItemId.Num());
@@ -60,6 +78,7 @@ void UECItemDataSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void UECItemDataSubsystem::Deinitialize()
 {
 	DefinitionToItemId.Reset();
+	FarmingToolTypeToItemId.Reset();
 	ItemDataTable = nullptr;
 	Super::Deinitialize();
 }
@@ -91,7 +110,7 @@ FName UECItemDataSubsystem::FindItemId(TSubclassOf<UECInventoryItemDefinition> I
 	}
 
 	const FName* ItemId = DefinitionToItemId.Find(FSoftObjectPath(ItemDefinition.Get()));
-	return *ItemId;
+	return ItemId ? *ItemId : NAME_None;
 }
 
 FName UECItemDataSubsystem::FindItemId(const UECInventoryItemInstance* ItemInstance) const
@@ -107,4 +126,10 @@ const FECItemTableRow* UECItemDataSubsystem::FindItemData(TSubclassOf<UECInvento
 const FECItemTableRow* UECItemDataSubsystem::FindItemData(const UECInventoryItemInstance* ItemInstance) const
 {
 	return FindItemData(FindItemId(ItemInstance));
+}
+
+const FECItemTableRow* UECItemDataSubsystem::FindFarmingToolData(EECWorkbenchUpgradeType ToolType) const
+{
+	const FName* ItemId = FarmingToolTypeToItemId.Find(ToolType);
+	return ItemId ? FindItemData(*ItemId) : nullptr;
 }

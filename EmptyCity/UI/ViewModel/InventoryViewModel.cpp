@@ -2,6 +2,7 @@
 
 #include "Inventory/ECInventoryItemInstance.h"
 #include "Inventory/ECInventoryManagerComponent.h"
+#include "Subsystem/ECItemDataSubsystem.h"
 
 namespace
 {
@@ -45,6 +46,41 @@ const TArray<FInventoryEntry>& UInventoryViewModel::GetInventoryEntries() const
     const UECInventoryManagerComponent* Inventory = InventoryComponent.Get();
 
     return Inventory ? Inventory->InventoryList.Entries : GetEmptyInventoryEntries();
+}
+
+TArray<FInventoryEntry> UInventoryViewModel::GetInventoryEntriesByCategory(
+    EECInventoryItemCategory Category) const
+{
+    TArray<FInventoryEntry> FilteredEntries;
+    UECInventoryManagerComponent* Inventory = InventoryComponent.Get();
+    if (!Inventory)
+    {
+        return FilteredEntries;
+    }
+
+    const TArray<FInventoryEntry>& Entries = GetInventoryEntries();
+    FilteredEntries.Reserve(Entries.Num());
+
+    UECItemDataSubsystem& ItemDataSubsystem = UECItemDataSubsystem::Get(Inventory);
+    for (const FInventoryEntry& Entry : Entries)
+    {
+        if (!IsValid(Entry.Instance) || Entry.StackCount <= 0)
+        {
+            continue;
+        }
+
+        const FECItemTableRow* ItemData = ItemDataSubsystem.FindItemData(Entry.Instance);
+        const EECInventoryItemCategory ItemCategory = ItemData
+            ? ItemData->InventoryCategory
+            : EECInventoryItemCategory::Item;
+
+        if (ItemCategory == Category)
+        {
+            FilteredEntries.Add(Entry);
+        }
+    }
+
+    return FilteredEntries;
 }
 
 bool UInventoryViewModel::ContainsItem(UECInventoryItemInstance* ItemInstance) const

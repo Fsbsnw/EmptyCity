@@ -9,7 +9,7 @@ class UMeshComponent;
 class UNiagaraComponent;
 class UNiagaraSystem;
 
-/** AnimNotifyState가 지정한 구간 동안 무기의 두 소켓을 Niagara Ribbon 파라미터로 전달합니다. */
+/** AnimNotifyState가 지정한 구간 동안 선택한 메시의 두 본/소켓을 Niagara Ribbon 파라미터로 전달합니다. */
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class EMPTYCITY_API UWeaponTrailComponent : public UActorComponent
 {
@@ -26,9 +26,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Weapon Trail")
 	bool BeginTrail();
 
+	/** 지정한 메시의 본/소켓 두 개를 소스로 사용해 트레일을 시작합니다. */
+	UFUNCTION(BlueprintCallable, Category="Weapon Trail")
+	bool BeginTrailFromMesh(UMeshComponent* InSourceMesh, FName InStartSocket, FName InEndSocket);
+
 	/** 트레일 시작 요청 하나를 종료합니다. */
 	UFUNCTION(BlueprintCallable, Category="Weapon Trail")
 	void EndTrail();
+
+	/** 지정한 메시 소스로 시작한 트레일 요청 하나를 종료합니다. */
+	UFUNCTION(BlueprintCallable, Category="Weapon Trail")
+	void EndTrailFromMesh(UMeshComponent* InSourceMesh, FName InStartSocket, FName InEndSocket);
 
 	/** 몽타주 중단, 사망 등의 상황에서 모든 요청을 무시하고 트레일을 즉시 종료합니다. */
 	UFUNCTION(BlueprintCallable, Category="Weapon Trail")
@@ -42,9 +50,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Weapon Trail|Source")
 	FComponentReference SourceMeshComponent;
 
-	/** 실행할 Niagara 트레일 시스템입니다. */
+	/** 무기 공격에 사용할 Niagara 트레일 시스템입니다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon Trail|Effect")
-	TObjectPtr<UNiagaraSystem> TrailSystem;
+	TObjectPtr<UNiagaraSystem> WeaponTrailSystem;
+
+	/** 발차기 공격에 사용할 Niagara 트레일 시스템입니다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon Trail|Effect")
+	TObjectPtr<UNiagaraSystem> KickTrailSystem;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon Trail|Source")
 	FName StartSocket = TEXT("SM_BossWeapon_A01_Bottom");
@@ -59,15 +71,30 @@ protected:
 	FName TrailEndParameter = TEXT("User.TrailEnd");
 
 private:
-	bool ResolveSourceMesh();
+	enum class ETrailSourceMode : uint8
+	{
+		None,
+		ComponentDefault,
+		ExplicitMesh
+	};
+
+	bool ResolveDefaultSourceMesh(UMeshComponent*& OutSourceMesh) const;
+	bool BeginTrailInternal(ETrailSourceMode InSourceMode, UMeshComponent* InSourceMesh, FName InStartSocket, FName InEndSocket);
+	void EndTrailInternal(ETrailSourceMode InSourceMode, UMeshComponent* InSourceMesh, FName InStartSocket, FName InEndSocket);
+	void EndActiveTrailRequest();
+	UNiagaraSystem* GetTrailSystemForSource(ETrailSourceMode InSourceMode) const;
 	bool EnsureTrailEffectComponent();
 	bool UpdateTrailParameters();
 	void StopTrailEffect();
+	bool IsActiveSource(ETrailSourceMode InSourceMode, UMeshComponent* InSourceMesh, FName InStartSocket, FName InEndSocket) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> TrailEffectComponent;
 
 	TWeakObjectPtr<UMeshComponent> CachedSourceMesh;
+	ETrailSourceMode ActiveSourceMode = ETrailSourceMode::None;
+	FName ActiveStartSocket = NAME_None;
+	FName ActiveEndSocket = NAME_None;
 
 	/** 인접하거나 겹친 NotifyState가 서로의 트레일을 조기에 끄지 않도록 요청 수를 추적합니다. */
 	int32 ActiveTrailRequestCount = 0;

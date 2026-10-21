@@ -1,12 +1,14 @@
 #include "AbilitySystem/Ability/Player/ECGameplayAbility_Farm.h"
 
-#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Actor/Farming/ECFarmingResourceActor.h"
 #include "Character/Player/ECPlayer.h"
+#include "Character/Player/State/ECPlayerState.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Data/Farming/ECFarmingTableRow.h"
-#include "Equipment/ECEquipmentInstance.h"
-#include "Equipment/ECEquipmentManagerComponent.h"
+#include "Data/Workbench/ECWorkbenchUpgradeDataAsset.h"
 #include "Equipment/Weapon/ECWeaponInstance.h"
 
 UECGameplayAbility_Farm::UECGameplayAbility_Farm()
@@ -27,26 +29,82 @@ void UECGameplayAbility_Farm::ActivateAbility(const FGameplayAbilitySpecHandle H
 	FarmingTarget = Cast<AECFarmingResourceActor>(const_cast<AActor*>(ToRawPtr(TriggerEventData->Target)));
 	const FECFarmingTableRow& FarmingData = FarmingTarget->GetFarmingData();
 
-	// 플레이어의 장비 관리자와 현재 무기를 보관합니다.
 	AECPlayer* Player = Cast<AECPlayer>(GetAvatarActorFromActorInfo());
-	EquipmentManager = Player->FindComponentByClass<UECEquipmentManagerComponent>();
 	EquippedWeapon = Player->GetEquippedWeapon();
 
-	// 파밍 도구가 보이도록 현재 무기 Actor를 숨깁니다.
-	for (AActor* WeaponActor : EquippedWeapon->GetSpawnedActors())
+	// 작업대 도구 강화 단계에 설정된 실제 파밍 소요 시간을 적용합니다.
+	// 데이터가 없거나 Axe/Pickaxe 대상이 아니면 DT_Farming의 기본 시간을 사용합니다.
+	float EffectiveInteractionDuration = FarmingData.InteractionDuration;
+	float FarmingMontagePlayRate = 1.0f;
+	const bool bUsesUpgradeableTool =
+		FarmingData.ToolUpgradeType == EECWorkbenchUpgradeType::Axe ||
+		FarmingData.ToolUpgradeType == EECWorkbenchUpgradeType::Pickaxe;
+	if (bUsesUpgradeableTool)
 	{
-		WeaponActor->SetActorHiddenInGame(true);
+		if (const AECPlayerState* PlayerState = Player->GetPlayerState<AECPlayerState>())
+		{
+			float ConfiguredDuration = 0.0f;
+			if (PlayerState->GetWorkbenchUpgradeValue(
+				FarmingData.ToolUpgradeType,
+				TEXT("InteractionDuration"),
+				ConfiguredDuration) && ConfiguredDuration > UE_KINDA_SMALL_NUMBER)
+			{
+				EffectiveInteractionDuration = ConfiguredDuration;
+
+				// 몽타주 배속은 파밍 대상의 InteractionDuration과 무관하게,
+				// 해당 도구 1단계 작업 시간 대비 현재 단계 작업 시간만으로 계산합니다.
+				if (const UECWorkbenchUpgradeDataAsset* UpgradeData = PlayerState->GetWorkbenchUpgradeData())
+				{
+					if (const FECWorkbenchUpgradeLevelData* LevelOneData =
+						UpgradeData->FindLevelData(FarmingData.ToolUpgradeType, 1))
+					{
+						const FECWorkbenchUpgradeValue* LevelOneDuration = LevelOneData->Values.FindByPredicate(
+							[](const FECWorkbenchUpgradeValue& Value)
+							{
+								return Value.ValueId == TEXT("InteractionDuration");
+							});
+
+						if (LevelOneDuration && LevelOneDuration->Value > UE_KINDA_SMALL_NUMBER)
+						{
+							FarmingMontagePlayRate = LevelOneDuration->Value / ConfiguredDuration;
+						}
+					}
+				}
+			}
+		}
+	}
+	EffectiveInteractionDuration = FMath::Max(0.1f, EffectiveInteractionDuration);
+	FarmingMontagePlayRate = FMath::Max(UE_KINDA_SMALL_NUMBER, FarmingMontagePlayRate);
+
+	// 파밍 애니메이션은 항상 플레이어의 1인칭 Mesh에서 재생합니다.
+	ActiveFarmingMesh = Player->GetFirstPersonMesh();
+	ActiveFarmingMontage = FarmingData.FarmingMontage.LoadSynchronous();
+	Player->SetActiveFarmingSound(FarmingData.FarmingSound);
+
+	// 현재 방망이를 숨기고 파밍 대상에 맞는 도끼/곡괭이를 1인칭 Mesh에 표시합니다.
+	if (EquippedWeapon)
+	{
+		for (AActor* WeaponActor : EquippedWeapon->GetSpawnedActors())
+		{
+			WeaponActor->SetActorHiddenInGame(true);
+		}
+	}
+	Player->SetFirstPersonFarmingToolActive(true, FarmingData.ToolUpgradeType);
+
+	if (ActiveFarmingMontage)
+	{
+		if (UAnimInstance* FarmingAnimInstance = ActiveFarmingMesh
+			? ActiveFarmingMesh->GetAnimInstance()
+			: nullptr)
+		{
+			FarmingAnimInstance->Montage_Play(ActiveFarmingMontage, FarmingMontagePlayRate);
+		}
 	}
 
-	// 파밍 데이터에 지정된 도구를 임시 장착합니다.
-	FarmingTool = EquipmentManager->EquipItem(FarmingData.ToolEquipmentDefinition);
-
-	// 파밍 몽타주를 재생합니다.
-	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, FarmingData.FarmingMontage.LoadSynchronous());
-	MontageTask->ReadyForActivation();
-
-	// 데이터에 지정된 홀딩 시간이 끝나면 파밍을 완료합니다.
-	UAbilityTask_WaitDelay* FarmingTimer = UAbilityTask_WaitDelay::WaitDelay(this, FarmingData.InteractionDuration);
+	// 강화 단계에 설정된 정확한 초가 지나면 파밍을 완료합니다.
+	UAbilityTask_WaitDelay* FarmingTimer = UAbilityTask_WaitDelay::WaitDelay(
+		this,
+		EffectiveInteractionDuration);
 	FarmingTimer->OnFinish.AddDynamic(this, &ThisClass::HandleFarmingCompleted);
 	FarmingTimer->ReadyForActivation();
 }
@@ -60,14 +118,33 @@ void UECGameplayAbility_Farm::HandleFarmingCompleted()
 
 void UECGameplayAbility_Farm::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
-	// 파밍 중 임시 장착한 도구를 해제합니다.
-	EquipmentManager->UnequipItem(FarmingTool);
-
-	// 숨겨 두었던 기존 무기 Actor를 다시 표시합니다.
-	for (AActor* WeaponActor : EquippedWeapon->GetSpawnedActors())
+	// 타이머 종료와 취소 모두에서 1인칭 파밍 몽타주를 멈춥니다.
+	if (ActiveFarmingMesh)
 	{
-		WeaponActor->SetActorHiddenInGame(false);
+		if (UAnimInstance* FarmingAnimInstance = ActiveFarmingMesh->GetAnimInstance())
+		{
+			FarmingAnimInstance->Montage_Stop(0.15f, ActiveFarmingMontage);
+		}
 	}
+
+	if (AECPlayer* Player = Cast<AECPlayer>(GetAvatarActorFromActorInfo()))
+	{
+		Player->SetFirstPersonFarmingToolActive(false);
+		Player->SetActiveFarmingSound(FDataTableRowHandle());
+	}
+
+	// 파밍 중 숨긴 기존 방망이를 다시 표시합니다.
+	if (EquippedWeapon)
+	{
+		for (AActor* WeaponActor : EquippedWeapon->GetSpawnedActors())
+		{
+			WeaponActor->SetActorHiddenInGame(false);
+		}
+	}
+
+	ActiveFarmingMontage = nullptr;
+	ActiveFarmingMesh = nullptr;
+	EquippedWeapon = nullptr;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

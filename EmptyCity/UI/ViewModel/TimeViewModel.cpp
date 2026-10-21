@@ -7,6 +7,8 @@
 
 void UTimeViewModel::BindCallbacksToDependencies(AActor* ContextActor)
 {
+	Super::BindCallbacksToDependencies(ContextActor);
+
 	UECTimeSubsystem& TimeSubsystem = UECTimeSubsystem::Get(this);
 	TimeSubsystem.OnGameTimeChanged.AddUObject(this, &UTimeViewModel::HandleTimeChanged);
 
@@ -15,6 +17,8 @@ void UTimeViewModel::BindCallbacksToDependencies(AActor* ContextActor)
 
 void UTimeViewModel::BroadcastInitialValues()
 {
+	Super::BroadcastInitialValues();
+
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(CurrentDay);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(CurrentTimeOfDay);
 }

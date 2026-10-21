@@ -6,6 +6,7 @@
 
 /**
  * 넉백 GameplayEvent를 받아 피격자의 HitReactionComponent에 지상 넉백을 요청합니다.
+ * 이벤트 OptionalObject에 액터가 있으면 해당 액터를 방사형 넉백의 중심으로 사용합니다.
  * 이 어빌리티는 피격 가능한 캐릭터의 AbilitySet을 통해 한 번만 영구 부여합니다.
  */
 UCLASS()

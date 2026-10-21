@@ -9,6 +9,7 @@
 class UECInventoryManagerComponent;
 class UECInventoryItemInstance;
 class UInventoryViewModel;
+class AECInventoryContainer;
 /**
  * 
  */
@@ -40,7 +41,9 @@ public:
 	int32 MoveItemToPlayer(UECInventoryItemInstance* ItemInstance, int32 Count = 1);
 
 	int32 DiscardPlayerItem(UECInventoryItemInstance* ItemInstance,	int32 Count = 1);
-	int32 DiscardStorageItem(UECInventoryItemInstance* ItemInstance, int32 Count = 1);
+
+	/** 현재 상호작용 중인 보관함/교환대 액터를 반환합니다. */
+	AECInventoryContainer* GetStorageContainer() const;
 
 private:
 	UPROPERTY()

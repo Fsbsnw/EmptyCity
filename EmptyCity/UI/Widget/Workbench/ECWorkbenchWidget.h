@@ -3,19 +3,16 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Data/Workbench/ECWorkbenchUpgradeTypes.h"
 #include "UI/Widget/ECUserWidget.h"
 #include "ECWorkbenchWidget.generated.h"
 
-struct FInventoryEntry;
-struct FECWeaponTableRow;
 class UButton;
-class UDataTable;
-class UECInventoryItemInstance;
-class UECInventorySlotWidget;
-class UECItemDetailWidget;
-class UOverlay;
-class UScrollBox;
-class UTextBlock;
+class UECWorkbenchStatUpgradeWidget;
+class UECWorkbenchToolUpgradeWidget;
+class UECWorkbenchWeaponUpgradeWidget;
+class UWidget;
+class UWidgetSwitcher;
 
 UENUM(BlueprintType)
 enum class EWorkbenchMode : uint8
@@ -25,40 +22,26 @@ enum class EWorkbenchMode : uint8
 	Weapon
 };
 
-/**
- * 스탯 강화, 도구 제작, 무기 제작 화면의 공통 UI를 관리합니다.
- * 실제 강화/제작 데이터와 실행 로직은 추후 전용 ViewModel에 연결합니다.
- */
+/** 작업대 탭과 탭별 상세 페이지 전환을 관리합니다. */
 UCLASS()
 class EMPTYCITY_API UECWorkbenchWidget : public UECUserWidget
 {
 	GENERATED_BODY()
 
 public:
-	UECWorkbenchWidget(const FObjectInitializer& ObjectInitializer);
 	virtual void OnWidgetOpened_Implementation() override;
 
-private:
-	/** 추후 모드별 제작 목록을 전달할 때 사용할 공통 슬롯 갱신 함수입니다. */
-	void RefreshWorkbenchScrollBox(const TArray<FInventoryEntry>& Entries);
-	void RefreshWeaponScrollBox();
-	void RefreshWorkbenchContent();
-	void RefreshSelectionVisuals();
-	void SetWorkbenchMode(EWorkbenchMode NewMode);
-	void ClearSelectedItem();
-	int32 FindHoveredSlotIndex() const;
-	void ApplyWeaponDataToSlot(
-		UECInventorySlotWidget* SlotWidget,
-		FName WeaponRowName,
-		const FECWeaponTableRow& WeaponData,
-		bool bIsUnlocked) const;
-	void ShowWeaponDetails(FName WeaponRowName);
-	void ShowPlaceholderDetails();
-	const FECWeaponTableRow* FindWeaponData(FName WeaponRowName) const;
-	bool IsWeaponUnlocked(FName WeaponRowName) const;
+protected:
+	virtual void NativeConstruct() override;
 
-	void HandleItemSlotClicked(UECInventoryItemInstance* ItemInstance);
-	void HandleItemSlotRightClicked(UECInventoryItemInstance* ItemInstance);
+private:
+	void RefreshStatUpgradeWidgets();
+	void SetWorkbenchMode(EWorkbenchMode NewMode);
+	void SetSelectedTool(EECWorkbenchUpgradeType NewTool);
+	void RefreshToolTabState();
+	int32 ResolveDetailPageIndex() const;
+	UECWorkbenchToolUpgradeWidget* ResolveToolDetailWidget() const;
+	UECWorkbenchWeaponUpgradeWidget* ResolveWeaponDetailWidget() const;
 
 	UFUNCTION()
 	void HandleStatTabClicked();
@@ -70,33 +53,21 @@ private:
 	void HandleWeaponTabClicked();
 
 	UFUNCTION()
-	void HandleConfirmActionClicked();
+	void HandleAxeClicked();
+
+	UFUNCTION()
+	void HandlePickaxeClicked();
 
 	const TCHAR* GetCurrentModeLogName() const;
 
-	UPROPERTY()
-	TObjectPtr<UECInventoryItemInstance> SelectedItemInstance;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UDataTable> LoadedWeaponDataTable;
-
-	TArray<FName> DisplayedWeaponRowNames;
-
-	FName SelectedWeaponRowName = NAME_None;
-	int32 SelectedSlotIndex = INDEX_NONE;
-
-	UPROPERTY(BlueprintReadOnly, meta=(AllowPrivateAccess = "true")) // 블루프린트 ConfirmAction 사운드 재생 구분
+private:
+	UPROPERTY(BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	EWorkbenchMode CurrentWorkbenchMode = EWorkbenchMode::Stat;
 
+	UPROPERTY(BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	EECWorkbenchUpgradeType SelectedTool = EECWorkbenchUpgradeType::Axe;
+
 protected:
-	virtual void NativeConstruct() override;
-	virtual void NativeDestruct() override;
-	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry,	const FPointerEvent& InMouseEvent) override;
-
-	/** 현재 탭에 맞는 강화/제작 목록을 표시할 공통 ScrollBox입니다. */
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	TObjectPtr<UScrollBox> ScrollBox_Inventory;
-
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UButton> Button_StatTab;
 
@@ -106,32 +77,31 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UButton> Button_WeaponTab;
 
+	/** Tool 탭 안에서 도끼 상세를 선택하는 하위 탭 버튼입니다. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Axe;
+
+	/** Tool 탭 안에서 곡괭이 상세를 선택하는 하위 탭 버튼입니다. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Pickaxe;
+
+	/** Axe/Pickaxe 하위 탭 영역입니다. Tool 탭에서만 표시됩니다. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> Panel_ToolTabs;
+
+	/** 0: 스탯, 1: Axe 상세, 2: Pickaxe 상세, 3: 무기 상세 */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	TObjectPtr<UTextBlock> Text_WorkbenchModeLabel;
+	TObjectPtr<UWidgetSwitcher> WidgetSwitcher_ItemDetail;
 
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	TObjectPtr<UTextBlock> Text_ActionValueLabel;
+	/** 스탯 탭에서 항상 표시되는 최대 체력 카드입니다. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UECWorkbenchStatUpgradeWidget> StatUpgradeWidget_MaxHealth;
 
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	TObjectPtr<UButton> Button_ConfirmAction;
+	/** 스탯 탭에서 항상 표시되는 최대 스태미나 카드입니다. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UECWorkbenchStatUpgradeWidget> StatUpgradeWidget_MaxStamina;
 
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	TObjectPtr<UTextBlock> Text_ConfirmAction;
-
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	TObjectPtr<UOverlay> Overlay_ItemDetail;
-
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	TObjectPtr<UECItemDetailWidget> ItemDetailWidget;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Workbench")
-	TSubclassOf<UECInventorySlotWidget> SlotWidgetClass;
-
-	/** 아직 데이터가 없는 Stat/Tool 탭에 표시할 빈 슬롯 개수입니다. */
-	UPROPERTY(EditDefaultsOnly, Category = "Workbench", meta = (ClampMin = "0"))
-	int32 PlaceholderSlotCount = 5;
-
-	/** Weapon 탭에서 직접 열 DT_Weapon입니다. 필요하면 Workbench BP에서 교체할 수 있습니다. */
-	UPROPERTY(EditDefaultsOnly, Category = "Workbench")
-	TSoftObjectPtr<UDataTable> WeaponDataTable;
+	/** 스탯 탭에서 항상 표시되는 최대 가방 무게 카드입니다. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UECWorkbenchStatUpgradeWidget> StatUpgradeWidget_MaxInventoryWeight;
 };

@@ -29,13 +29,15 @@ public class EmptyCity : ModuleRules
 			"SlateCore",
 			"MediaAssets",
 			"LevelSequence",
+			"MovieScene",
 			"StateTreeModule",
 			"GameplayStateTreeModule"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"AnimGraphRuntime"
+			"AnimGraphRuntime",
+			"PhysicsCore"
 		});
 		
 		PublicIncludePaths.AddRange(new string[] { ModuleDirectory });

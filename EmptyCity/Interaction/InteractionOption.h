@@ -5,6 +5,7 @@
 #include "InteractionOption.generated.h"
 
 class IInteractableTarget;
+class UTexture2D;
 class UUserWidget;
 
 /**
@@ -68,7 +69,11 @@ public:
 // Interaction UI
 // ─────────────────────────────────────────────────────────────
 public:
-	/** 이 상호작용을 위해 화면에 띄울 위젯 클래스입니다. */
+	/** 공통 인디케이터 위젯 안에 표시할 대상별 아이콘입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "변수|UI")
+	TSoftObjectPtr<UTexture2D> InteractionIcon;
+
+	/** 기본 인디케이터 위젯이 설정되지 않았을 때만 사용하는 호환용 위젯 클래스입니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TSoftClassPtr<UUserWidget> InteractionWidgetClass;
 
@@ -87,6 +92,7 @@ public:
 			InteractionAbilityToGrant == Other.InteractionAbilityToGrant&&
 			TargetAbilitySystem == Other.TargetAbilitySystem &&
 			TargetInteractionAbilityHandle == Other.TargetInteractionAbilityHandle &&
+			InteractionIcon == Other.InteractionIcon &&
 			InteractionWidgetClass == Other.InteractionWidgetClass &&
 			bHoldInteraction == Other.bHoldInteraction &&
 			Text.IdenticalTo(Other.Text) &&

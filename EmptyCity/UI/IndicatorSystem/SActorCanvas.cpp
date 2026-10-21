@@ -3,6 +3,7 @@
 #include "SActorCanvas.h"
 
 #include "Engine/GameViewportClient.h"
+#include "Components/Image.h"
 #include "Layout/ArrangedChildren.h"
 #include "ECIndicatorManagerComponent.h"
 #include "IActorIndicatorWidget.h"
@@ -597,6 +598,36 @@ void SActorCanvas::AddIndicatorForEntry(UIndicatorDescriptor* Indicator)
 	if (IndicatorWidget->GetClass()->ImplementsInterface(UIndicatorWidgetInterface::StaticClass()))
 	{
 		IIndicatorWidgetInterface::Execute_BindIndicator(IndicatorWidget, Indicator);
+	}
+
+	// WBP_Indicator_Interaction의 레이아웃과 텍스트는 그대로 두고 대상별 이미지 리소스만 교체합니다.
+	// 위젯 풀에서 재사용될 수 있으므로 아이콘이 비어 있을 때도 이전 브러시를 반드시 지웁니다.
+	if (UImage* IndicatorImage = Cast<UImage>(IndicatorWidget->GetWidgetFromName(TEXT("Image_Indicator"))))
+	{
+		const TSoftObjectPtr<UTexture2D> IndicatorIcon = Indicator->GetIndicatorIcon();
+		if (IndicatorIcon.IsNull())
+		{
+			IndicatorImage->SetBrush(FSlateBrush());
+		}
+		else
+		{
+			// SetBrushFromSoftTexture는 비동기 로드가 끝날 때까지 위젯에 저장된 기본 브러시를 유지합니다.
+			// 첫 실행의 첫 프레임에도 잘못된 아이콘이 노출되지 않도록 슬롯에 추가하기 전에 확정합니다.
+			if (UTexture2D* LoadedIndicatorIcon = IndicatorIcon.LoadSynchronous())
+			{
+				// 텍스처의 원본 크기를 브러시 Desired Size에 반영합니다.
+				IndicatorImage->SetBrushFromTexture(LoadedIndicatorIcon, true);
+			}
+			else
+			{
+				IndicatorImage->SetBrush(FSlateBrush());
+				UE_LOG(
+					LogTemp,
+					Warning,
+					TEXT("Failed to load indicator icon: %s"),
+					*IndicatorIcon.ToSoftObjectPath().ToString());
+			}
+		}
 	}
 
 	Indicator->IndicatorWidget = IndicatorWidget;

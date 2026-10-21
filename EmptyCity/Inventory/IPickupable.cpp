@@ -1,63 +1,12 @@
 ﻿#include "IPickupable.h"
-#include "Data/Item/ECItemTableRow.h"
 #include "GameFramework/Actor.h"
 #include "ECInventoryItemDefinition.h"
 #include "ECInventoryManagerComponent.h"
-#include "ECInventoryItemInstance.h"
-#include "Subsystem/ECItemDataSubsystem.h"
 #include "UObject/ScriptInterface.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(IPickupable)
 
 class UActorComponent;
-
-namespace
-{
-struct FECSimulatedInventoryEntry
-{
-	TSubclassOf<UECInventoryItemDefinition> ItemDef;
-	int32 StackCount = 0;
-};
-
-bool CanAddPickupToInventory(const UECInventoryManagerComponent* InventoryComponent, const FInventoryPickup& PickupInventory)
-{
-	TArray<FECSimulatedInventoryEntry> SimulatedEntries;
-	SimulatedEntries.Reserve(UECInventoryManagerComponent::MaxInventorySlots);
-	for (const FInventoryEntry& Entry : InventoryComponent->InventoryList.Entries)
-	{
-		FECSimulatedInventoryEntry& SimulatedEntry = SimulatedEntries.AddDefaulted_GetRef();
-		SimulatedEntry.ItemDef = Entry.Instance->ItemDef;
-		SimulatedEntry.StackCount = Entry.StackCount;
-	}
-
-	for (const FPickupTemplate& Template : PickupInventory.Templates)
-	{
-		const FECItemTableRow* ItemData = UECItemDataSubsystem::Get(InventoryComponent).FindItemData(Template.ItemDef);
-		const int32 StackMax = FMath::Max(1, ItemData->StackMax);
-		int32 Remaining = Template.StackCount;
-		for (FECSimulatedInventoryEntry& Entry : SimulatedEntries)
-		{
-			if (Entry.ItemDef != Template.ItemDef || Entry.StackCount >= StackMax) continue;
-			const int32 AddedCount = FMath::Min(StackMax - Entry.StackCount, Remaining);
-			Entry.StackCount += AddedCount;
-			Remaining -= AddedCount;
-			if (Remaining == 0) break;
-		}
-
-		while (Remaining > 0 && SimulatedEntries.Num() < UECInventoryManagerComponent::MaxInventorySlots)
-		{
-			FECSimulatedInventoryEntry& NewEntry = SimulatedEntries.AddDefaulted_GetRef();
-			NewEntry.ItemDef = Template.ItemDef;
-			NewEntry.StackCount = FMath::Min(StackMax, Remaining);
-			Remaining -= NewEntry.StackCount;
-		}
-
-		if (Remaining > 0) return false;
-	}
-
-	return true;
-}
-}
 
 UPickupableStatics::UPickupableStatics()
 	: Super(FObjectInitializer::Get())
@@ -84,16 +33,75 @@ TScriptInterface<IPickupable> UPickupableStatics::GetFirstPickupableFromActor(AA
 	return TScriptInterface<IPickupable>();
 }
 
-bool UPickupableStatics::AddPickupToInventory(UECInventoryManagerComponent* InventoryComponent, TScriptInterface<IPickupable> Pickup)
+EECPickupResult UPickupableStatics::AddPickupToInventory(
+	UECInventoryManagerComponent* InventoryComponent,
+	TScriptInterface<IPickupable> Pickup)
 {
-	const FInventoryPickup& PickupInventory = Pickup->GetPickupInventory();
-	if (!CanAddPickupToInventory(InventoryComponent, PickupInventory)) return false;
-
-	// 설계도 묶음: 설계도와 개수로 인벤토리에서 새 인스턴스를 생성합니다.
-	for (const FPickupTemplate& Template : PickupInventory.Templates)
+	if (!InventoryComponent || !Pickup)
 	{
-		InventoryComponent->AddItemDefinition(Template.ItemDef, Template.StackCount);
+		return EECPickupResult::Failed;
 	}
 
-	return true;
+	const FInventoryPickup& PickupInventory = Pickup->GetPickupInventory();
+	if (PickupInventory.Templates.IsEmpty())
+	{
+		return EECPickupResult::Failed;
+	}
+
+	// 잘못된 데이터 때문에 일부만 추가되는 상황을 막기 위해 변경 전에 전체를 검증합니다.
+	for (const FPickupTemplate& Template : PickupInventory.Templates)
+	{
+		if (!Template.ItemDef || Template.StackCount <= 0)
+		{
+			return EECPickupResult::Failed;
+		}
+	}
+
+	FInventoryPickup RemainingPickup;
+	int64 TotalAddedCount = 0;
+	bool bBlockedByWeight = false;
+
+	for (const FPickupTemplate& Template : PickupInventory.Templates)
+	{
+		const int32 AddableCount = InventoryComponent->GetMaxAddableItemCount(
+			Template.ItemDef,
+			Template.StackCount);
+		if (AddableCount <= 0)
+		{
+			const double UnitWeight = InventoryComponent->GetItemDefinitionUnitWeight(Template.ItemDef);
+			const double MaxWeight = InventoryComponent->GetMaxInventoryWeight();
+			bBlockedByWeight |= MaxWeight > 0.0
+				&& UnitWeight > UE_SMALL_NUMBER
+				&& static_cast<double>(InventoryComponent->GetTotalWeight()) + UnitWeight
+					> MaxWeight + UE_KINDA_SMALL_NUMBER;
+		}
+
+		int32 AddedCount = 0;
+		if (AddableCount > 0
+			&& InventoryComponent->AddItemDefinition(Template.ItemDef, AddableCount))
+		{
+			AddedCount = AddableCount;
+			TotalAddedCount += AddedCount;
+		}
+
+		const int32 RemainingCount = Template.StackCount - AddedCount;
+		if (RemainingCount > 0)
+		{
+			FPickupTemplate& RemainingTemplate = RemainingPickup.Templates.AddDefaulted_GetRef();
+			RemainingTemplate.ItemDef = Template.ItemDef;
+			RemainingTemplate.StackCount = RemainingCount;
+		}
+	}
+
+	if (TotalAddedCount <= 0)
+	{
+		return bBlockedByWeight
+			? EECPickupResult::FailedWeightLimit
+			: EECPickupResult::Failed;
+	}
+
+	Pickup->SetPickupInventory(RemainingPickup);
+	return RemainingPickup.Templates.IsEmpty()
+		? EECPickupResult::Complete
+		: EECPickupResult::Partial;
 }

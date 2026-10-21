@@ -42,7 +42,12 @@ void UECGameplayAbility_Knockback::ActivateAbility(
 		return;
 	}
 
-	const FVector KnockbackDirection = Instigator->GetActorForwardVector().GetSafeNormal2D();
+	// OptionalObject로 방향 기준 액터가 전달되면 방사형 폭발로 보고
+	// 해당 액터의 중심에서 피격자 바깥 방향으로 밀어냅니다.
+	const AActor* KnockbackOrigin = Cast<AActor>(TriggerEventData->OptionalObject);
+	const FVector KnockbackDirection = KnockbackOrigin
+		? (TargetActor->GetActorLocation() - KnockbackOrigin->GetActorLocation()).GetSafeNormal2D()
+		: Instigator->GetActorForwardVector().GetSafeNormal2D();
 	if (!KnockbackDirection.IsNearlyZero())
 	{
 		if (UHitReactionComponent* HitReaction = TargetActor->FindComponentByClass<UHitReactionComponent>())

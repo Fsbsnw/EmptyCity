@@ -3,6 +3,8 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/MeshComponent.h"
+#include "Character/Player/State/ECPlayerState.h"
+#include "Data/Workbench/ECWorkbenchUpgradeDataAsset.h"
 #include "DrawDebugHelpers.h"
 #include "ECGameplayTags.h"
 #include "ECWeaponInstance.h"
@@ -10,10 +12,64 @@
 #include "Data/Weapon/ECWeaponTableRow.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Pawn.h"
 
 namespace
 {
 	const FName MeleeTraceProfileName(TEXT("EC_MeleeTrace"));
+
+	FGameplayTag ResolvePlayerWeaponTag(const AActor* AttackOwner)
+	{
+		const APawn* PlayerPawn = Cast<APawn>(AttackOwner);
+		const AECPlayerState* PlayerState = PlayerPawn
+			? PlayerPawn->GetPlayerState<AECPlayerState>()
+			: nullptr;
+		if (!PlayerState)
+		{
+			return ECGameplayTags::Weapon;
+		}
+
+		switch (FMath::Clamp(
+			PlayerState->GetWorkbenchUpgradeLevel(EECWorkbenchUpgradeType::Weapon),
+			1,
+			3))
+		{
+		case 1:
+			return ECGameplayTags::Weapon_WoodenClub;
+		case 2:
+			return ECGameplayTags::Weapon_PipeClub;
+		case 3:
+			return ECGameplayTags::Weapon_SteelClub;
+		default:
+			return ECGameplayTags::Weapon;
+		}
+	}
+
+	FName ResolveWeaponTraceSocketName(
+		const UMeshComponent* MeshComponent,
+		FName RequestedSocket,
+		const TCHAR* FallbackSuffix)
+	{
+		if (!IsValid(MeshComponent))
+		{
+			return NAME_None;
+		}
+
+		if (MeshComponent->DoesSocketExist(RequestedSocket))
+		{
+			return RequestedSocket;
+		}
+
+		for (const FName SocketName : MeshComponent->GetAllSocketNames())
+		{
+			if (SocketName.ToString().EndsWith(FallbackSuffix, ESearchCase::IgnoreCase))
+			{
+				return SocketName;
+			}
+		}
+
+		return NAME_None;
+	}
 }
 
 UWeaponTraceComponent::UWeaponTraceComponent()
@@ -119,14 +175,22 @@ void UWeaponTraceComponent::UpdateTrace()
 	}
 
 	const FECWeaponTraceConfig& TraceConfig = AttackDefinition->TraceConfig;
-	if (!MeshComponent->DoesSocketExist(TraceConfig.TraceStartSocket) || !MeshComponent->DoesSocketExist(TraceConfig.TraceEndSocket))
+	const FName TraceStartSocket = ResolveWeaponTraceSocketName(
+		MeshComponent,
+		TraceConfig.TraceStartSocket,
+		TEXT("_Bottom"));
+	const FName TraceEndSocket = ResolveWeaponTraceSocketName(
+		MeshComponent,
+		TraceConfig.TraceEndSocket,
+		TEXT("_Top"));
+	if (TraceStartSocket.IsNone() || TraceEndSocket.IsNone())
 	{
 		EndTrace();
 		return;
 	}
 
-	const FVector CurrentTraceStart = MeshComponent->GetSocketLocation(TraceConfig.TraceStartSocket);
-	const FVector CurrentTraceEnd = MeshComponent->GetSocketLocation(TraceConfig.TraceEndSocket);
+	const FVector CurrentTraceStart = MeshComponent->GetSocketLocation(TraceStartSocket);
+	const FVector CurrentTraceEnd = MeshComponent->GetSocketLocation(TraceEndSocket);
 	const float TraceRadius = FMath::Max(TraceConfig.TraceRadius, 0.1f);
 
 	// 현재 무기 길이 전체를 검사합니다.
@@ -253,6 +317,12 @@ void UWeaponTraceComponent::SetOwningWeaponInstance(UECWeaponInstance* InWeaponI
 	OwningWeaponInstance = InWeaponInstance;
 }
 
+void UWeaponTraceComponent::SetTraceMesh(UMeshComponent* InTraceMesh)
+{
+	EndTrace();
+	TraceMesh = InTraceMesh;
+}
+
 void UWeaponTraceComponent::ApplyDamageToHitTarget(const FHitResult& HitResult)
 {
 	const FECWeaponAttackDefinition* AttackDefinition =
@@ -311,8 +381,13 @@ void UWeaponTraceComponent::ApplyDamageToHitTarget(const FHitResult& HitResult)
 	}
 
 	DamageSpec.Data->AddDynamicAssetTag(ECGameplayTags::Character_Type_Player);
+	DamageSpec.Data->AddDynamicAssetTag(ResolvePlayerWeaponTag(AttackOwner));
+	DamageSpec.Data->AddDynamicAssetTag(
+		bHeavyAttack ? ECGameplayTags::Attack_Heavy : ECGameplayTags::Attack_Normal);
 
-	DamageSpec.Data->SetSetByCallerMagnitude(ECGameplayTags::SetByCaller_WeaponAttackPower, WeaponData->AttackPower);
+	DamageSpec.Data->SetSetByCallerMagnitude(
+		ECGameplayTags::SetByCaller_WeaponAttackPower,
+		WeaponInstance->GetEffectiveAttackPower());
 
 	DamageSpec.Data->SetSetByCallerMagnitude(ECGameplayTags::SetByCaller_DamageMultiplier, DamageMultiplier);
 

@@ -1,0 +1,46 @@
+# Unreal Engine - generated files
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+
+# Generated project / IDE files
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.sdf
+*.opensdf
+*.slnx
+
+# Compiler and debug artifacts
+*.pdb
+*.obj
+*.o
+*.ipch
+*.ilk
+*.idb
+*.pch
+
+# OS / temporary files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.tmp
+*.log
+
+# AsyncLoadingScreen default assets
+/Plugins/AsyncLoadingScreen/Content/Default/
+/Plugins/AsyncLoadingScreen/Resources/
+
+# Note: Keep Source/, Config/, *.uproject, *.uplugin, and plugin Source/.
+# Keep Content/ unless this repository is intentionally code-only.
+# Precompiled plugins without Source/ may require their Binaries/ directory;
+# add an explicit exception if your project uses one.

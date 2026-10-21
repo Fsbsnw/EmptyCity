@@ -3,14 +3,35 @@
 
 #include "Actor/InventoryContainer/ECInventoryContainer.h"
 
+#include "ECGameplayTags.h"
 #include "Character/Player/ECPlayer.h"
+#include "Character/Player/Controller/ECPlayerController.h"
 #include "Components/BoxComponent.h"
+#include "Data/Item/ECItemTableRow.h"
+#include "Interaction/InteractionQuery.h"
 #include "Inventory/ECInventoryItemDefinition.h"
+#include "Inventory/ECInventoryManagerComponent.h"
+#include "Subsystem/ECItemDataSubsystem.h"
 #include "UI/Subsystem/UIManagerSubsystem.h"
 
 void AECInventoryContainer::GatherInteractionOptions(const FInteractionQuery& InteractQuery, FInteractionOptionBuilder& OptionBuilder)
 {
-	OptionBuilder.AddInteractionOption(Option);
+	FInteractionOption DisplayOption = Option;
+	if (InventoryUITag.MatchesTagExact(ECGameplayTags::InputTag_UI_Inventory_TradingPost)
+		&& HasEndingSubmissionItem(InteractQuery))
+	{
+		DisplayOption.Text = EndingSubmissionInteractionText;
+
+		if (const FECItemTableRow* ItemData =
+			UECItemDataSubsystem::Get(this).FindItemData(EndingSubmissionItemId))
+		{
+			DisplayOption.InteractionIcon = !ItemData->InteractionIndicatorIcon.IsNull()
+				? ItemData->InteractionIndicatorIcon
+				: ItemData->Icon;
+		}
+	}
+
+	OptionBuilder.AddInteractionOption(DisplayOption);
 }
 
 UECInventoryManagerComponent* AECInventoryContainer::GetInventoryManagerComponent() const
@@ -21,6 +42,10 @@ UECInventoryManagerComponent* AECInventoryContainer::GetInventoryManagerComponen
 AECInventoryContainer::AECInventoryContainer()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	EndingSubmissionInteractionText = NSLOCTEXT(
+		"Interaction",
+		"SubmitCylinder",
+		"실린더 제출");
 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>("Mesh");
 	SetRootComponent(Mesh);
@@ -92,6 +117,40 @@ void AECInventoryContainer::AddInitialInventory()
 
 		// 인벤토리에 아이템을 지급한다.
 		// @TODO: Inventory UI 구현시 ItemInstance를 UI에 추가할 것
-		UECInventoryItemInstance* ItemInstance = InventoryManagerComponent->AddItemDefinition(InitialItem.ItemDef, InitialItem.StackCount);
+		UECInventoryItemInstance* ItemInstance = InventoryManagerComponent->AddItemDefinition(
+			InitialItem.ItemDef,
+			InitialItem.StackCount,
+			false);
 	}
+}
+
+bool AECInventoryContainer::HasEndingSubmissionItem(
+	const FInteractionQuery& InteractQuery) const
+{
+	if (EndingSubmissionItemId.IsNone())
+	{
+		return false;
+	}
+
+	const APawn* RequestingPawn = Cast<APawn>(InteractQuery.RequestingAvatar.Get());
+	const AECPlayerController* PlayerController = Cast<AECPlayerController>(
+		InteractQuery.RequestingController.IsValid()
+			? InteractQuery.RequestingController.Get()
+			: RequestingPawn ? RequestingPawn->GetController() : nullptr);
+	const UECInventoryManagerComponent* PlayerInventory = PlayerController
+		? PlayerController->GetInventoryManagerComponent()
+		: nullptr;
+	if (!PlayerInventory)
+	{
+		return false;
+	}
+
+	const FECItemTableRow* ItemData =
+		UECItemDataSubsystem::Get(this).FindItemData(EndingSubmissionItemId);
+	const TSubclassOf<UECInventoryItemDefinition> ItemDefinition = ItemData
+		? ItemData->ItemDefinition.LoadSynchronous()
+		: nullptr;
+
+	return ItemDefinition
+		&& PlayerInventory->GetItemCountByDefinition(ItemDefinition) > 0;
 }
