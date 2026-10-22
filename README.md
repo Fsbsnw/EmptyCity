@@ -6,6 +6,15 @@
 
 > [GIF 삽입: 탐험 → 파밍 → 전투를 보여주는 대표 플레이 영상]
 
+## 목차
+
+| 시스템 | 자세히 보기 |
+| --- | --- |
+| UI·MVVM | [UI Framework](Docs/UI_Framework.md) |
+| AI | [StateTree AI](Docs/StateTree_AI.md) |
+| 공격·패링 | [GAS Combat](Docs/GAS_Combat.md) |
+| 보스 | [Boss Battle](Docs/Boss_Battle.md) |
+
 ## 대표 구현
 
 ### GameplayTag 기반 UIManager · MVVM
@@ -44,15 +53,6 @@ AI Perception으로 감지한 대상을 AIController가 관리하고 StateTree�
 > ![GIF 삽입: 작업대 강화](Media/Gif_Item_Upgrade.gif)
 
 [인벤토리·파밍 설명](Docs/Inventory_and_Loot.md)
-
-## 기술 문서
-
-| 시스템 | 자세히 보기 |
-| --- | --- |
-| UI·MVVM | [UI Framework](Docs/UI_Framework.md) |
-| AI | [StateTree AI](Docs/StateTree_AI.md) |
-| 공격·패링 | [GAS Combat](Docs/GAS_Combat.md) |
-| 보스 | [Boss Battle](Docs/Boss_Battle.md) |
 | 게임 흐름 | [GameFlow](Docs/GameFlow.md) |
 | 아이템·강화 | [Inventory & Loot](Docs/Inventory_and_Loot.md) |
 
