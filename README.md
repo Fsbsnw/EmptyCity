@@ -14,6 +14,8 @@
 | AI | [StateTree AI](Docs/StateTree_AI.md) |
 | 공격·패링 | [GAS Combat](Docs/GAS_Combat.md) |
 | 보스 | [Boss Battle](Docs/Boss_Battle.md) |
+| 게임 흐름 | [GameFlow](Docs/GameFlow.md) |
+| 아이템·강화 | [Inventory & Loot](Docs/Inventory_and_Loot.md) |
 
 ## 대표 구현
 
@@ -53,7 +55,5 @@ AI Perception으로 감지한 대상을 AIController가 관리하고 StateTree�
 > ![GIF 삽입: 작업대 강화](Media/Gif_Item_Upgrade.gif)
 
 [인벤토리·파밍 설명](Docs/Inventory_and_Loot.md)
-| 게임 흐름 | [GameFlow](Docs/GameFlow.md) |
-| 아이템·강화 | [Inventory & Loot](Docs/Inventory_and_Loot.md) |
 
-> 이 저장소는 포트폴리오용 C++ 코드 아카이브입니다. 게임 에셋과 `.uproject`가 포함되지 않아 단독 실행은 불가능합니다.
+> 이 저장소는 포트폴리오용 C++ 코드 아카이브입니다.
