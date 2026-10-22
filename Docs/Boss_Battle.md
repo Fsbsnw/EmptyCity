@@ -18,4 +18,3 @@
 
 - [ECEnemyBoss.cpp](../EmptyCity/Character/Enemy/ECEnemyBoss.cpp)
 - [BossPatternComponent.cpp](../EmptyCity/Character/Enemy/Component/BossPatternComponent.cpp)
-- [BossSprintLeapSlam.cpp](../EmptyCity/AbilitySystem/Ability/Enemy/Boss/BossSprintLeapSlam.cpp)
