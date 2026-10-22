@@ -4,7 +4,8 @@
 
 적 감지와 타깃 관리는 AIController, 행동 선택은 StateTree, 공격 실행은 GAS Ability로 나누었습니다.
 
-> [이미지 삽입: 순찰·추적·공격 StateTree 그래프]
+> ### 스테이트 트리 그래프
+> ![이미지 삽입: 순찰·추적·공격 StateTree 그래프](../Media/Image_StateTreeGraph.png)
 
 ## 동작 흐름
 
@@ -15,7 +16,8 @@
 - Ability가 활성인 동안 Task가 Running을 유지해 전투 동작과 상태 종료 시점을 연동합니다.
 - 시야 상실 유예, NavMesh 순찰 지점 탐색, 거리 기반 StateTree 중단 등 실제 월드에서 필요한 예외를 처리합니다.
 
-> [GIF 삽입: 적의 감지 → 추적 → 공격, 가능하면 디버그와 실제 플레이 비교]
+> ### 감지 -> 추적 -> 공격
+> ![GIF 삽입: 적의 감지 → 추적 → 공격, 가능하면 디버그와 실제 플레이 비교](../Media/Gif_Combat_Basic.gif)
 
 ## 주요 코드
 
