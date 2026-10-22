@@ -4,7 +4,7 @@
 
 지역 이동과 사망·재도전에서 서로 다른 서브시스템이 담당하는 처리를 하나의 플레이 흐름으로 연결했습니다.
 
-> [GIF 삽입: 지도 선택 → 페이드 → 지역 도착]
+> ![GIF 삽입: 지도 선택 → 페이드 → 지역 도착](../Media/Gif_Map_Travel.gif)
 
 ## 대표 흐름: 지역 이동
 
@@ -15,7 +15,7 @@
 - Saveable 인터페이스를 통해 각 시스템의 상태 저장·복원을 분리합니다.
 - 일반 사망과 보스 지역 재도전은 체크포인트 및 복원 정책을 달리합니다.
 
-> [이미지 삽입: Region / GameFlow / Time / Save / Cutscene 간 메시지 흐름]
+> ![이미지 삽입: Region / GameFlow / Time / Save / Cutscene 간 메시지 흐름](../Media/Image_GameFlowSystems.png)
 
 ## 주요 코드
 
