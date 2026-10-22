@@ -18,5 +18,5 @@
 ## 주요 코드
 
 - [ECInventoryManagerComponent.cpp](../EmptyCity/Inventory/ECInventoryManagerComponent.cpp)
-- [ItemDropComponent.cpp](../EmptyCity/Character/Enemy/Component/ItemDropComponent.cpp)
-- [ECPlayerState.cpp](../EmptyCity/Character/Player/ECPlayerState.cpp)
+- [ItemDropComponent.cpp](../EmptyCity/Item/ECItemDropComponent.cpp)
+- [ECPlayerState.cpp](../EmptyCity/Character/Player/State/ECPlayerState.cpp)
