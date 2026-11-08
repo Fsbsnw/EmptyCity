@@ -6,6 +6,19 @@
 
 > ![이미지 삽입: 메인 메뉴](Media/Image_MainMenu.png)
 
+
+# 플레이 영상
+
+<a href="https://youtu.be/lUBWvdjc5kg" target="_blank">
+  <img
+    src="https://img.youtube.com/vi/lUBWvdjc5kg/hqdefault.jpg"
+    alt="EmptyCity 시연 영상"
+    width="600"
+  />
+</a>
+
+<p>이미지를 클릭하면 YouTube 시연 영상으로 이동합니다.</p>
+
 ## 목차
 
 | 시스템 | 자세히 보기 |
